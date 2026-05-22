@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASG Solutions — Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#f0f4ff',
+              100: '#e0eaff',
+              500: '#4f6ef7',
+              600: '#3b55e6',
+              700: '#2d43cc',
+              900: '#1a2580',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Smooth page transitions */
+    .page { display: none; }
+    .page.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    /* Sidebar active state */
+    .nav-item.active { background: #e0eaff; color: #3b55e6; font-weight: 600; }
+    .nav-item.active svg { color: #3b55e6; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!--   LAYOUT WRAPPER                                   -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="flex h-screen overflow-hidden">
+
+  <!-- ══ SIDEBAR ══ -->
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 shadow-sm">
+
+    <!-- Logo -->
+    <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
+      <div class="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center shadow">
+        <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-bold text-slate-800 leading-tight text-sm">ASG Solutions</p>
+        <p class="text-xs text-slate-400">AI Automation Hub</p>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 px-3 py-4 space-y-1">
+
+      <button onclick="navigate('overview')" id="nav-overview"
+        class="nav-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50 transition-all text-sm">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        Overview
+      </button>
+
+      <button onclick="navigate('businesses')" id="nav-businesses"
+        class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50 transition-all text-sm">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3M9 7h1m-1 4h1m4-4h1m-1 4h1M9 15h6"/>
+        </svg>
+        Businesses
+      </button>
+
+      <button onclick="navigate('categories')" id="nav-categories"
+        class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50 transition-all text-sm">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+        </svg>
+        Categories
+      </button>
+
+      <button onclick="navigate('templates')" id="nav-templates"
+        class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50 transition-all text-sm">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        Templates
+      </button>
+
+      <button onclick="navigate('logs')" id="nav-logs"
+        class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50 transition-all text-sm">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+        </svg>
+        Activity Log
+      </button>
+
+      <button onclick="navigate('integrations')" id="nav-integrations"
+        class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50 transition-all text-sm">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/>
+        </svg>
+        Integrations
+      </button>
+
+    </nav>
+
+    <!-- User profile bottom -->
+    <div class="px-4 py-4 border-t border-slate-100">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center text-white text-xs font-bold">IM</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-semibold text-slate-700 truncate">Ibrahim Masarwa</p>
+          <p class="text-xs text-slate-400 truncate">Admin</p>
+        </div>
+        <div class="w-2 h-2 rounded-full bg-green-400"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══ MAIN AREA ══ -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- Top Header -->
+    <header class="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between flex-shrink-0">
+      <div>
+        <p class="text-xs text-slate-400 uppercase tracking-widest font-medium" id="breadcrumb">Home / Overview</p>
+        <h1 class="text-xl font-bold text-slate-800 mt-0.5" id="page-title">Overview</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- System status pill -->
+        <div class="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-medium px-3 py-1.5 rounded-full border border-green-100">
+          <div class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+          System Online
+        </div>
+        <!-- Notification bell -->
+        <button class="relative p-2 rounded-lg hover:bg-slate-50 transition">
+          <svg class="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+          </svg>
+          <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Scrollable Content -->
+    <main class="flex-1 overflow-y-auto px-8 py-6">
+
+      <!-- ════════════════════ PAGE: OVERVIEW ════════════════════ -->
+      <div id="page-overview" class="page active">
+
+        <!-- Metric Cards -->
+        <div class="grid grid-cols-3 gap-5 mb-8">
+
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-4">
+              <p class="text-sm text-slate-500 font-medium">Active Businesses</p>
+              <div class="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center">
+                <svg class="w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16"/>
+                </svg>
+              </div>
+            </div>
+            <p class="text-3xl font-bold text-slate-800" id="metric-businesses">—</p>
+            <p class="text-xs text-green-600 mt-1 font-medium">↑ 2 this week</p>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-4">
+              <p class="text-sm text-slate-500 font-medium">Triggers Today</p>
+              <div class="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center">
+                <svg class="w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+              </div>
+            </div>
+            <p class="text-3xl font-bold text-slate-800" id="metric-triggers">—</p>
+            <p class="text-xs text-purple-600 mt-1 font-medium">↑ 12% vs yesterday</p>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-4">
+              <p class="text-sm text-slate-500 font-medium">System Status</p>
+              <div class="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center">
+                <svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </div>
+            </div>
+            <p class="text-3xl font-bold text-green-600">Online</p>
+            <p class="text-xs text-slate-400 mt-1 font-medium">All services healthy</p>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="font-semibold text-slate-700 text-sm">Recent Activity</h2>
+            <span class="text-xs text-slate-400">Last 24 hours</span>
+          </div>
+          <div id="activity-list" class="divide-y divide-slate-50">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════ PAGE: BUSINESSES ════════════════════ -->
+      <div id="page-businesses" class="page">
+
+        <!-- Toolbar -->
+        <div class="flex items-center justify-between mb-6">
+          <div class="relative">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
+            </svg>
+            <input id="business-search" oninput="renderBusinessTable()" type="text" placeholder="Search businesses..."
+              class="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent w-64 bg-white"/>
+          </div>
+          <button onclick="openAddBusinessModal()"
+            class="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add Business
+          </button>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Business</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Channel</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Category</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Joined</th>
+                <th class="px-6 py-3"></th>
+              </tr>
+            </thead>
+            <tbody id="business-table-body" class="divide-y divide-slate-100">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════════════════════ PAGE: CATEGORIES ════════════════════ -->
+      <div id="page-categories" class="page">
+
+        <!-- Toolbar -->
+        <div class="flex items-center justify-between mb-6">
+          <p class="text-sm text-slate-500">Manage business categories and their automation blueprints</p>
+          <button onclick="openAddCategoryModal()"
+            class="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add Category
+          </button>
+        </div>
+
+        <!-- Categories Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Category</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Businesses</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Blueprints</th>
+                <th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="categories-table-body" class="divide-y divide-slate-100">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Blueprints Section (shown when "Manage" is clicked on a category) -->
+        <div id="blueprints-section" class="mt-6 hidden">
+          <div class="flex items-center justify-between mb-4">
+            <h3 id="blueprints-title" class="text-base font-bold text-slate-800">Blueprints</h3>
+            <button onclick="openAddBlueprintModal()"
+              class="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add Blueprint
+            </button>
+          </div>
+          <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200">
+                  <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Blueprint</th>
+                  <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
+                  <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Webhook URL</th>
+                  <th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="blueprints-table-body" class="divide-y divide-slate-100">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════ PAGE: TEMPLATES ════════════════════ -->
+      <div id="page-templates" class="page">
+
+        <!-- Toolbar -->
+        <div class="flex items-center justify-between mb-6">
+          <p class="text-sm text-slate-500">Automation templates linked to your businesses</p>
+          <button onclick="openAddTemplateModal()"
+            class="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add Template
+          </button>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Template</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Business</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Webhook URL</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Created</th>
+                <th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="templates-table-body" class="divide-y divide-slate-100">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════════════════════ PAGE: ACTIVITY LOG ════════════════════ -->
+      <div id="page-logs" class="page">
+
+        <!-- Toolbar -->
+        <div class="flex items-center justify-between mb-6">
+          <p class="text-sm text-slate-500">Every trigger ever fired — your operational journal</p>
+          <button onclick="fetchLogs()"
+            class="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Template</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Business</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Detail</th>
+                <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Time</th>
+              </tr>
+            </thead>
+            <tbody id="logs-table-body" class="divide-y divide-slate-100">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════════════════════ PAGE: INTEGRATIONS ════════════════════ -->
+      <div id="page-integrations" class="page">
+
+        <div class="space-y-5">
+
+          <!-- Make.com -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center border border-orange-100">
+                  <svg class="w-6 h-6 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="font-semibold text-slate-800">Make.com</h3>
+                  <p class="text-sm text-slate-500 mt-0.5">Automation brain — handles AI processing and complex workflows</p>
+                </div>
+              </div>
+              <span class="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-semibold px-3 py-1 rounded-full border border-green-100">
+                <div class="w-1.5 h-1.5 rounded-full bg-green-500"></div> Connected
+              </span>
+            </div>
+            <div class="mt-5 grid grid-cols-3 gap-4">
+              <div class="bg-slate-50 rounded-xl p-4">
+                <p class="text-xs text-slate-400 mb-1">Webhook URL</p>
+                <p class="text-xs font-mono text-slate-700 truncate">https://hook.make.com/abc123...</p>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-4">
+                <p class="text-xs text-slate-400 mb-1">Scenarios Active</p>
+                <p class="text-sm font-bold text-slate-800">4</p>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-4">
+                <p class="text-xs text-slate-400 mb-1">Last Triggered</p>
+                <p class="text-sm font-bold text-slate-800">2 min ago</p>
+              </div>
+            </div>
+            <div class="mt-4 flex gap-2">
+              <button onclick="showToast('Make.com settings saved')"
+                class="text-xs bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">Save Settings</button>
+              <button onclick="showToast('Make.com webhook test successful')"
+                class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium transition-colors">Test Connection</button>
+            </div>
+          </div>
+
+          <!-- WhatsApp -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center border border-green-100">
+                  <svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="font-semibold text-slate-800">WhatsApp Business API</h3>
+                  <p class="text-sm text-slate-500 mt-0.5">Meta Business — receives and sends WhatsApp messages</p>
+                </div>
+              </div>
+              <span class="flex items-center gap-1.5 bg-yellow-50 text-yellow-700 text-xs font-semibold px-3 py-1 rounded-full border border-yellow-100">
+                <div class="w-1.5 h-1.5 rounded-full bg-yellow-400"></div> Pending Setup
+              </span>
+            </div>
+            <div class="mt-5 space-y-3">
+              <div>
+                <label class="text-xs font-medium text-slate-500 block mb-1">Webhook Verify Token</label>
+                <input type="text" placeholder="Enter your verify token..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+              </div>
+              <div>
+                <label class="text-xs font-medium text-slate-500 block mb-1">Phone Number ID</label>
+                <input type="text" placeholder="From Meta Business dashboard..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+              </div>
+              <div>
+                <label class="text-xs font-medium text-slate-500 block mb-1">Access Token</label>
+                <input type="password" placeholder="••••••••••••••••" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+              </div>
+            </div>
+            <div class="mt-4 flex gap-2">
+              <button onclick="showToast('WhatsApp credentials saved')"
+                class="text-xs bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">Save Credentials</button>
+            </div>
+          </div>
+
+          <!-- Telegram -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100">
+                  <svg class="w-6 h-6 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.96 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="font-semibold text-slate-800">Telegram Bot API</h3>
+                  <p class="text-sm text-slate-500 mt-0.5">Bot webhook — receives and sends Telegram messages</p>
+                </div>
+              </div>
+              <span class="flex items-center gap-1.5 bg-yellow-50 text-yellow-700 text-xs font-semibold px-3 py-1 rounded-full border border-yellow-100">
+                <div class="w-1.5 h-1.5 rounded-full bg-yellow-400"></div> Pending Setup
+              </span>
+            </div>
+            <div class="mt-5 space-y-3">
+              <div>
+                <label class="text-xs font-medium text-slate-500 block mb-1">Bot Token</label>
+                <input type="password" placeholder="123456789:AABBccDDeeFF..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+              </div>
+              <div>
+                <label class="text-xs font-medium text-slate-500 block mb-1">Webhook URL (auto-filled after ngrok)</label>
+                <input type="text" placeholder="https://your-ngrok-url.ngrok.io/webhook/telegram" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50"/>
+              </div>
+            </div>
+            <div class="mt-4 flex gap-2">
+              <button onclick="showToast('Telegram bot token saved')"
+                class="text-xs bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">Save Token</button>
+              <button onclick="showToast('Telegram webhook registered')"
+                class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium transition-colors">Register Webhook</button>
+            </div>
+          </div>
+
+          <!-- Airtable -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-teal-50 flex items-center justify-center border border-teal-100">
+                  <svg class="w-6 h-6 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h8M8 8h4"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="font-semibold text-slate-800">Airtable</h3>
+                  <p class="text-sm text-slate-500 mt-0.5">Temporary database — stores client data and business records</p>
+                </div>
+              </div>
+              <span class="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-semibold px-3 py-1 rounded-full border border-green-100">
+                <div class="w-1.5 h-1.5 rounded-full bg-green-500"></div> Connected
+              </span>
+            </div>
+            <div class="mt-5 grid grid-cols-2 gap-4">
+              <div class="bg-slate-50 rounded-xl p-4">
+                <p class="text-xs text-slate-400 mb-1">Base ID</p>
+                <p class="text-xs font-mono text-slate-700">appXXXXXXXXXXXX</p>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-4">
+                <p class="text-xs text-slate-400 mb-1">Records</p>
+                <p class="text-sm font-bold text-slate-800">247</p>
+              </div>
+            </div>
+            <div class="mt-4 flex gap-2">
+              <button onclick="showToast('Airtable connection verified')"
+                class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium transition-colors">Test Connection</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ════════════════════ MODAL: ADD BUSINESS ════════════════════ -->
+<div id="modal-add-business" class="fixed inset-0 z-50 hidden items-center justify-center">
+  <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onclick="closeModal('modal-add-business')"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10">
+    <h2 class="text-base font-bold text-slate-800 mb-5">Add New Business</h2>
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Business Name *</label>
+        <input id="new-biz-name" type="text" placeholder="e.g. Abu Ali Garage"
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Type *</label>
+        <select id="new-biz-type" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select type...</option>
+          <option>Garage</option>
+          <option>Restaurant</option>
+          <option>Retail</option>
+          <option>Construction</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Channel</label>
+        <select id="new-biz-channel" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option>WhatsApp</option>
+          <option>Telegram</option>
+          <option>Both</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Category</label>
+        <select id="new-biz-category" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">No category</option>
+          <!-- Populated dynamically by JS -->
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Owner Phone</label>
+        <input id="new-biz-phone" type="text" placeholder="+972 5X-XXX-XXXX"
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button onclick="addBusiness()"
+        class="flex-1 bg-brand-500 hover:bg-brand-600 text-white py-2 rounded-lg text-sm font-medium transition-colors">Add Business</button>
+      <button onclick="closeModal('modal-add-business')"
+        class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ MODAL: ADD TEMPLATE ════════════════════ -->
+<div id="modal-add-template" class="fixed inset-0 z-50 hidden items-center justify-center">
+  <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onclick="closeModal('modal-add-template')"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10">
+    <h2 class="text-base font-bold text-slate-800 mb-5">Add New Template</h2>
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Template Name *</label>
+        <input id="new-tpl-name" type="text" placeholder="e.g. Appointment Booking"
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Business *</label>
+        <select id="new-tpl-business" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select a business...</option>
+          <!-- Populated dynamically by JS -->
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Make.com Webhook URL *</label>
+        <input id="new-tpl-webhook" type="text" placeholder="https://hook.make.com/..."
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Description</label>
+        <input id="new-tpl-desc" type="text" placeholder="What does this automation do?"
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button onclick="addTemplate()"
+        class="flex-1 bg-brand-500 hover:bg-brand-600 text-white py-2 rounded-lg text-sm font-medium transition-colors">Add Template</button>
+      <button onclick="closeModal('modal-add-template')"
+        class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ MODAL: ADD CATEGORY ════════════════════ -->
+<div id="modal-add-category" class="fixed inset-0 z-50 hidden items-center justify-center">
+  <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onclick="closeModal('modal-add-category')"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10">
+    <h2 class="text-base font-bold text-slate-800 mb-5">Add New Category</h2>
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Category Name *</label>
+        <input id="new-cat-name" type="text" placeholder="e.g. Restaurants"
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Description</label>
+        <input id="new-cat-desc" type="text" placeholder="What kind of businesses belong here?"
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button onclick="addCategory()"
+        class="flex-1 bg-brand-500 hover:bg-brand-600 text-white py-2 rounded-lg text-sm font-medium transition-colors">Add Category</button>
+      <button onclick="closeModal('modal-add-category')"
+        class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ MODAL: ADD BLUEPRINT ════════════════════ -->
+<div id="modal-add-blueprint" class="fixed inset-0 z-50 hidden items-center justify-center">
+  <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onclick="closeModal('modal-add-blueprint')"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10">
+    <h2 class="text-base font-bold text-slate-800 mb-5">Add New Blueprint</h2>
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Blueprint Name *</label>
+        <input id="new-bp-name" type="text" placeholder="e.g. Appointment Booking"
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Description</label>
+        <input id="new-bp-desc" type="text" placeholder="What does this blueprint do?"
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 block mb-1">Make.com Webhook URL</label>
+        <input id="new-bp-webhook" type="text" placeholder="https://hook.make.com/..."
+          class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button onclick="addBlueprint()"
+        class="flex-1 bg-brand-500 hover:bg-brand-600 text-white py-2 rounded-lg text-sm font-medium transition-colors">Add Blueprint</button>
+      <button onclick="closeModal('modal-add-blueprint')"
+        class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ TOAST NOTIFICATION ════════════════════ -->
+<div id="toast" class="fixed bottom-6 right-6 z-50 hidden">
+  <div class="bg-slate-800 text-white text-sm px-5 py-3 rounded-xl shadow-xl flex items-center gap-3 max-w-xs">
+    <svg class="w-4 h-4 text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+    </svg>
+    <span id="toast-message"></span>
+  </div>
+</div>
+
+<!-- ════════════════════ JAVASCRIPT ════════════════════ -->
+<script>
+
+/* ─────────────────────────────────────────────
+   API BASE URL
+   All fetch calls point here. Change once if the port changes.
+───────────────────────────────────────────── */
+const API = 'http://localhost:8000/api/v1';
+
+/* ─────────────────────────────────────────────
+   STATE
+   Runtime cache — populated from the real API on load.
+   Never hardcoded anymore.
+───────────────────────────────────────────── */
+const state = {
+  businesses: [],   // filled by fetchBusinesses()
+  templates: [],    // filled by fetchTemplates()
+  logs: [],         // filled by fetchLogs()
+  overview: {},     // filled by fetchOverview()
+  categories: [],   // filled by fetchCategories()
+  blueprints: [],   // filled by showBlueprints()
+  selectedCategoryId: null,
+};
+
+/* (no more static TEMPLATE_DEFS — templates come from the database now) */
+
+
+/* ─────────────────────────────────────────────
+   CORE API HELPERS
+   apiFetch() wraps the native fetch() with:
+   - correct headers
+   - error handling
+   - toast on failure
+───────────────────────────────────────────── */
+async function apiFetch(method, endpoint, body = null) {
+  const options = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (body) options.body = JSON.stringify(body);
+
+  try {
+    const res = await fetch(`${API}${endpoint}`, options);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+      showToast(`Error: ${err.detail || res.statusText}`, 'error');
+      return null;
+    }
+    return await res.json();
+  } catch (e) {
+    showToast('Cannot reach server — is uvicorn running?', 'error');
+    return null;
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+   DATA FETCHERS
+   Each function calls the API and updates state
+───────────────────────────────────────────── */
+async function fetchBusinesses() {
+  const data = await apiFetch('GET', '/businesses');
+  if (data) state.businesses = data;
+  renderBusinessTable();
+  renderOverview();
+}
+
+async function fetchOverview() {
+  const data = await apiFetch('GET', '/overview');
+  if (data) {
+    document.getElementById('metric-businesses').textContent = data.active_businesses ?? '—';
+    document.getElementById('metric-triggers').textContent   = data.triggers_today      ?? '—';
+  }
+}
+
+async function fetchTemplates() {
+  const data = await apiFetch('GET', '/templates');
+  if (data) state.templates = data;
+  renderTemplates();
+}
+
+async function fetchLogs() {
+  const data = await apiFetch('GET', '/logs');
+  if (data) state.logs = data;
+  renderLogs();
+}
+
+
+/* ─────────────────────────────────────────────
+   NAVIGATION
+───────────────────────────────────────────── */
+const pages = { overview: 'Home / Overview', businesses: 'Home / Businesses', categories: 'Home / Categories', templates: 'Home / Templates', logs: 'Home / Activity Log', integrations: 'Home / Integrations' };
+
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`page-${page}`).classList.add('active');
+  document.getElementById(`nav-${page}`).classList.add('active');
+  document.getElementById('breadcrumb').textContent  = pages[page];
+  const title = page === 'logs' ? 'Activity Log' : page.charAt(0).toUpperCase() + page.slice(1);
+  document.getElementById('page-title').textContent  = title;
+
+  // Auto-refresh data when entering certain pages
+  if (page === 'logs') fetchLogs();
+  if (page === 'categories') fetchCategories();
+}
+
+
+/* ─────────────────────────────────────────────
+   OVERVIEW — render metrics from real data
+───────────────────────────────────────────── */
+function renderOverview() {
+  // Count active businesses from live state
+  const active = state.businesses.filter(b => b.status === 'active').length;
+  document.getElementById('metric-businesses').textContent = active;
+
+  // Build a recent-activity list from the businesses we know about
+  const activityHTML = state.businesses.slice(0, 5).map(b => {
+    const date = new Date(b.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return `
+      <div class="flex items-center gap-4 px-6 py-4 hover:bg-slate-50/50 transition-colors">
+        <div class="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"></div>
+        <span class="text-xs text-slate-400 font-mono flex-shrink-0 w-12">${date}</span>
+        <span class="text-xs font-semibold text-slate-600 flex-shrink-0 w-40 truncate">${b.name}</span>
+        <span class="text-xs text-slate-500 flex-1">Business registered — channel: ${b.channel}</span>
+      </div>`;
+  }).join('') || `<div class="px-6 py-8 text-center text-sm text-slate-400">No activity yet. Add your first business.</div>`;
+
+  document.getElementById('activity-list').innerHTML = activityHTML;
+}
+
+
+/* ─────────────────────────────────────────────
+   BUSINESSES TABLE — renders from state.businesses
+───────────────────────────────────────────── */
+function renderBusinessTable() {
+  const query    = (document.getElementById('business-search')?.value || '').toLowerCase();
+  const filtered = state.businesses.filter(b =>
+    b.name.toLowerCase().includes(query) || b.business_type?.toLowerCase().includes(query)
+  );
+
+  const tbody = document.getElementById('business-table-body');
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-12 text-slate-400 text-sm">No businesses found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(b => {
+    const statusClass = b.status === 'active'
+      ? 'bg-green-50 text-green-700 border-green-100'
+      : 'bg-slate-100 text-slate-500 border-slate-200';
+    const channelIcon = b.channel === 'WhatsApp' ? '💬' : b.channel === 'Telegram' ? '✈️' : '💬✈️';
+
+    return `
+      <tr class="hover:bg-slate-50/50 transition-colors">
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center text-brand-500 font-bold text-sm">
+              ${b.name.charAt(0)}
+            </div>
+            <span class="font-medium text-slate-800 text-sm">${b.name}</span>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-sm text-slate-500">${b.business_type || '—'}</td>
+        <td class="px-6 py-4 text-sm text-slate-500">${channelIcon} ${b.channel || '—'}</td>
+        <td class="px-6 py-4 text-sm text-slate-500">${b.category_name || '—'}</td>
+        <td class="px-6 py-4">
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full border ${statusClass}">${b.status}</span>
+        </td>
+        <td class="px-6 py-4 text-sm text-slate-400">${b.created_at ? new Date(b.created_at).toLocaleDateString('en-GB') : '—'}</td>
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-2 justify-end">
+            <a href="/portal?token=${b.portal_token}" target="_blank"
+              class="text-xs text-brand-500 hover:text-brand-600 font-medium px-3 py-1.5 rounded-lg hover:bg-brand-50 transition-all">Portal</a>
+            <button onclick="editBusiness(${b.id})"
+              class="text-xs text-slate-500 hover:text-brand-500 font-medium px-3 py-1.5 rounded-lg hover:bg-brand-50 transition-all">Edit</button>
+            <button onclick="deleteBusiness(${b.id})"
+              class="text-xs text-slate-500 hover:text-red-500 font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 transition-all">Delete</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+
+/* ─────────────────────────────────────────────
+   BUSINESS CRUD — real API calls
+───────────────────────────────────────────── */
+function openAddBusinessModal() {
+  // Populate the category dropdown from state.categories
+  const catSelect = document.getElementById('new-biz-category');
+  catSelect.innerHTML = '<option value="">No category</option>'
+    + state.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+  document.getElementById('modal-add-business').classList.remove('hidden');
+  document.getElementById('modal-add-business').classList.add('flex');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+  document.getElementById(id).classList.remove('flex');
+}
+
+async function addBusiness() {
+  const name       = document.getElementById('new-biz-name').value.trim();
+  const type       = document.getElementById('new-biz-type').value;
+  const channel    = document.getElementById('new-biz-channel').value;
+  const categoryId = document.getElementById('new-biz-category').value;
+
+  if (!name || !type) { showToast('Please fill in required fields', 'error'); return; }
+
+  // POST to FastAPI → creates a row in the businesses table
+  const body = {
+    name,
+    business_type: type,
+    channel,
+    status: 'active',
+  };
+  if (categoryId) body.category_id = parseInt(categoryId);
+
+  const result = await apiFetch('POST', '/businesses', body);
+
+  if (result) {
+    showToast(`"${result.name}" added successfully`);
+    state.businesses.push(result);   // add to local cache
+    renderBusinessTable();
+    renderOverview();
+    closeModal('modal-add-business');
+    document.getElementById('new-biz-name').value = '';
+  }
+}
+
+async function deleteBusiness(id) {
+  const biz = state.businesses.find(b => b.id === id);
+  if (!confirm(`Delete "${biz?.name}"?`)) return;
+
+  // DELETE to FastAPI → removes the row from the database
+  const result = await apiFetch('DELETE', `/businesses/${id}`);
+
+  if (result) {
+    showToast(`"${biz.name}" deleted`);
+    state.businesses = state.businesses.filter(b => b.id !== id);
+    renderBusinessTable();
+    renderOverview();
+  }
+}
+
+async function editBusiness(id) {
+  const biz     = state.businesses.find(b => b.id === id);
+  const newName = prompt(`Edit name for "${biz?.name}":`, biz?.name);
+  if (!newName || newName === biz?.name) return;
+
+  // PUT to FastAPI → updates the name in the database
+  const result = await apiFetch('PUT', `/businesses/${id}`, { name: newName });
+
+  if (result) {
+    showToast('Business updated');
+    biz.name = result.name;
+    renderBusinessTable();
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+   TEMPLATES TABLE — real data from GET /api/v1/templates
+───────────────────────────────────────────── */
+function renderTemplates() {
+  const tbody = document.getElementById('templates-table-body');
+  if (!state.templates.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-slate-400 text-sm">No templates yet. Click "Add Template" to create one.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = state.templates.map(t => {
+    const webhookShort = t.make_webhook_url.length > 35
+      ? t.make_webhook_url.slice(0, 35) + '...'
+      : t.make_webhook_url;
+    const created = t.created_at ? new Date(t.created_at).toLocaleDateString('en-GB') : '—';
+
+    return `
+      <tr class="hover:bg-slate-50/50 transition-colors">
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-purple-500">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+            </div>
+            <div>
+              <span class="font-medium text-slate-800 text-sm block">${t.name}</span>
+              ${t.description ? `<span class="text-xs text-slate-400">${t.description}</span>` : ''}
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-sm text-slate-500">${t.business_name || '—'}</td>
+        <td class="px-6 py-4">
+          <span class="text-xs font-mono text-slate-500 bg-slate-50 px-2 py-1 rounded">${webhookShort}</span>
+        </td>
+        <td class="px-6 py-4 text-sm text-slate-400">${created}</td>
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-2 justify-end">
+            <button onclick="triggerTemplate(${t.id})"
+              class="flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+              Trigger
+            </button>
+            <button onclick="deleteTemplate(${t.id})"
+              class="text-xs text-slate-500 hover:text-red-500 font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 transition-all">Delete</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+
+/* ─────────────────────────────────────────────
+   ACTIVITY LOG TABLE — renders from state.logs
+───────────────────────────────────────────── */
+function renderLogs() {
+  const tbody = document.getElementById('logs-table-body');
+  if (!state.logs.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-slate-400 text-sm">No activity yet. Trigger a template to see logs here.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = state.logs.map(log => {
+    // Status badge: green for triggered, yellow for simulated, red for failed
+    const statusStyles = {
+      triggered: 'bg-green-50 text-green-700 border-green-100',
+      simulated: 'bg-yellow-50 text-yellow-700 border-yellow-100',
+      failed:    'bg-red-50 text-red-700 border-red-100',
+    };
+    const statusDots = {
+      triggered: 'bg-green-500',
+      simulated: 'bg-yellow-400',
+      failed:    'bg-red-500',
+    };
+    const style   = statusStyles[log.status] || statusStyles.failed;
+    const dotStyle = statusDots[log.status] || statusDots.failed;
+
+    const time = log.triggered_at
+      ? new Date(log.triggered_at).toLocaleString('en-GB', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        })
+      : '—';
+
+    return `
+      <tr class="hover:bg-slate-50/50 transition-colors">
+        <td class="px-6 py-4">
+          <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${style}">
+            <span class="w-1.5 h-1.5 rounded-full ${dotStyle}"></span>
+            ${log.status}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm font-medium text-slate-700">${log.template_name}</td>
+        <td class="px-6 py-4 text-sm text-slate-500">${log.business_name}</td>
+        <td class="px-6 py-4 text-xs text-slate-400">${log.detail || '—'}</td>
+        <td class="px-6 py-4 text-xs font-mono text-slate-400">${time}</td>
+      </tr>`;
+  }).join('');
+}
+
+
+/* ─────────────────────────────────────────────
+   TEMPLATE CRUD — real API calls
+───────────────────────────────────────────── */
+function openAddTemplateModal() {
+  // Populate the business dropdown from state.businesses (already fetched)
+  const select = document.getElementById('new-tpl-business');
+  select.innerHTML = '<option value="">Select a business...</option>'
+    + state.businesses.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+
+  document.getElementById('modal-add-template').classList.remove('hidden');
+  document.getElementById('modal-add-template').classList.add('flex');
+}
+
+async function addTemplate() {
+  const name      = document.getElementById('new-tpl-name').value.trim();
+  const bizId     = document.getElementById('new-tpl-business').value;
+  const webhook   = document.getElementById('new-tpl-webhook').value.trim();
+  const desc      = document.getElementById('new-tpl-desc').value.trim();
+
+  if (!name || !bizId || !webhook) { showToast('Please fill in all required fields', 'error'); return; }
+
+  const result = await apiFetch('POST', '/templates', {
+    name,
+    business_id:      parseInt(bizId),
+    make_webhook_url: webhook,
+    description:      desc || null,
+  });
+
+  if (result) {
+    showToast(`Template "${result.name}" created`);
+    // Re-fetch to get the business_name attached
+    await fetchTemplates();
+    await fetchOverview();
+    closeModal('modal-add-template');
+    // Clear the form
+    document.getElementById('new-tpl-name').value    = '';
+    document.getElementById('new-tpl-webhook').value = '';
+    document.getElementById('new-tpl-desc').value    = '';
+  }
+}
+
+async function triggerTemplate(id) {
+  const result = await apiFetch('POST', `/templates/${id}/trigger`);
+  if (result) {
+    const label = result.status === 'simulated'
+      ? `"${result.template}" simulated for ${result.business}`
+      : `"${result.template}" triggered for ${result.business} via Make.com`;
+    showToast(label);
+  }
+}
+
+async function deleteTemplate(id) {
+  const t = state.templates.find(t => t.id === id);
+  if (!confirm(`Delete template "${t?.name}"?`)) return;
+
+  const result = await apiFetch('DELETE', `/templates/${id}`);
+  if (result) {
+    showToast(`Template deleted`);
+    await fetchTemplates();
+    await fetchOverview();
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+   CATEGORIES — fetch, render, CRUD
+───────────────────────────────────────────── */
+async function fetchCategories() {
+  const data = await apiFetch('GET', '/categories');
+  if (data) state.categories = data;
+  renderCategories();
+}
+
+function renderCategories() {
+  const tbody = document.getElementById('categories-table-body');
+  if (!state.categories.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-slate-400 text-sm">No categories yet. Click "Add Category" to create one.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = state.categories.map(c => {
+    const bizCount = c.business_count ?? 0;
+    const bpCount  = c.blueprint_count ?? 0;
+
+    return `
+      <tr class="hover:bg-slate-50/50 transition-colors">
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center text-brand-500 font-bold text-sm">
+              ${c.name.charAt(0)}
+            </div>
+            <span class="font-medium text-slate-800 text-sm">${c.name}</span>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-sm text-slate-500">${c.description || '—'}</td>
+        <td class="px-6 py-4">
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-100">${bizCount}</span>
+        </td>
+        <td class="px-6 py-4">
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full border bg-purple-50 text-purple-700 border-purple-100">${bpCount}</span>
+        </td>
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-2 justify-end">
+            <button onclick="showBlueprints(${c.id})"
+              class="text-xs text-slate-500 hover:text-brand-500 font-medium px-3 py-1.5 rounded-lg hover:bg-brand-50 transition-all">Manage</button>
+            <button onclick="deleteCategory(${c.id})"
+              class="text-xs text-slate-500 hover:text-red-500 font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 transition-all">Delete</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function openAddCategoryModal() {
+  document.getElementById('modal-add-category').classList.remove('hidden');
+  document.getElementById('modal-add-category').classList.add('flex');
+}
+
+async function addCategory() {
+  const name = document.getElementById('new-cat-name').value.trim();
+  const desc = document.getElementById('new-cat-desc').value.trim();
+
+  if (!name) { showToast('Please enter a category name', 'error'); return; }
+
+  const result = await apiFetch('POST', '/categories', {
+    name,
+    description: desc || null,
+  });
+
+  if (result) {
+    showToast(`Category "${result.name}" created`);
+    await fetchCategories();
+    closeModal('modal-add-category');
+    document.getElementById('new-cat-name').value = '';
+    document.getElementById('new-cat-desc').value = '';
+  }
+}
+
+async function deleteCategory(id) {
+  const cat = state.categories.find(c => c.id === id);
+  if (!confirm(`Delete category "${cat?.name}"? This will not delete associated businesses.`)) return;
+
+  const result = await apiFetch('DELETE', `/categories/${id}`);
+  if (result) {
+    showToast(`Category "${cat.name}" deleted`);
+    state.categories = state.categories.filter(c => c.id !== id);
+    renderCategories();
+    // Hide blueprints section if we just deleted the selected category
+    if (state.selectedCategoryId === id) {
+      document.getElementById('blueprints-section').classList.add('hidden');
+      state.selectedCategoryId = null;
+    }
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+   BLUEPRINTS — fetch, render, CRUD
+───────────────────────────────────────────── */
+async function showBlueprints(categoryId) {
+  state.selectedCategoryId = categoryId;
+  const cat = state.categories.find(c => c.id === categoryId);
+
+  const data = await apiFetch('GET', `/categories/${categoryId}/blueprints`);
+  if (data) state.blueprints = data;
+
+  document.getElementById('blueprints-title').textContent = `Blueprints — ${cat?.name || 'Unknown'}`;
+  document.getElementById('blueprints-section').classList.remove('hidden');
+  renderBlueprints();
+}
+
+function renderBlueprints() {
+  const tbody = document.getElementById('blueprints-table-body');
+  if (!state.blueprints.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-12 text-slate-400 text-sm">No blueprints yet. Click "Add Blueprint" to create one.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = state.blueprints.map(bp => {
+    const webhookShort = bp.make_webhook_url && bp.make_webhook_url.length > 35
+      ? bp.make_webhook_url.slice(0, 35) + '...'
+      : (bp.make_webhook_url || '—');
+
+    return `
+      <tr class="hover:bg-slate-50/50 transition-colors">
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-purple-500">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+            </div>
+            <span class="font-medium text-slate-800 text-sm">${bp.name}</span>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-sm text-slate-500">${bp.description || '—'}</td>
+        <td class="px-6 py-4">
+          <span class="text-xs font-mono text-slate-500 bg-slate-50 px-2 py-1 rounded">${webhookShort}</span>
+        </td>
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-2 justify-end">
+            <button onclick="deleteBlueprint(${bp.id})"
+              class="text-xs text-slate-500 hover:text-red-500 font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 transition-all">Delete</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function openAddBlueprintModal() {
+  document.getElementById('modal-add-blueprint').classList.remove('hidden');
+  document.getElementById('modal-add-blueprint').classList.add('flex');
+}
+
+async function addBlueprint() {
+  const name    = document.getElementById('new-bp-name').value.trim();
+  const desc    = document.getElementById('new-bp-desc').value.trim();
+  const webhook = document.getElementById('new-bp-webhook').value.trim();
+
+  if (!name) { showToast('Please enter a blueprint name', 'error'); return; }
+
+  const result = await apiFetch('POST', '/blueprints', {
+    name,
+    description: desc || null,
+    make_webhook_url: webhook || null,
+    category_id: state.selectedCategoryId,
+  });
+
+  if (result) {
+    showToast(`Blueprint "${result.name}" created`);
+    await showBlueprints(state.selectedCategoryId);
+    await fetchCategories();  // refresh counts
+    closeModal('modal-add-blueprint');
+    document.getElementById('new-bp-name').value    = '';
+    document.getElementById('new-bp-desc').value    = '';
+    document.getElementById('new-bp-webhook').value = '';
+  }
+}
+
+async function deleteBlueprint(id) {
+  const bp = state.blueprints.find(b => b.id === id);
+  if (!confirm(`Delete blueprint "${bp?.name}"?`)) return;
+
+  const result = await apiFetch('DELETE', `/blueprints/${id}`);
+  if (result) {
+    showToast(`Blueprint deleted`);
+    await showBlueprints(state.selectedCategoryId);
+    await fetchCategories();  // refresh counts
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+   TOAST NOTIFICATION
+   type: 'success' (default) | 'error'
+───────────────────────────────────────────── */
+let toastTimeout;
+function showToast(message, type = 'success') {
+  const toast   = document.getElementById('toast');
+  const iconEl  = toast.querySelector('svg');
+  const msgEl   = document.getElementById('toast-message');
+
+  msgEl.textContent = message;
+
+  // Change icon color based on type
+  iconEl.classList.toggle('text-green-400', type === 'success');
+  iconEl.classList.toggle('text-red-400',   type === 'error');
+
+  toast.classList.remove('hidden');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => toast.classList.add('hidden'), 3500);
+}
+
+
+/* ─────────────────────────────────────────────
+   INIT
+   On page load:
+   1. Render static templates (UI only, no API needed)
+   2. Fetch businesses from the live API
+   3. Fetch overview numbers from the live API
+───────────────────────────────────────────── */
+async function init() {
+  await fetchBusinesses();     // GET /api/v1/businesses  → fills the table
+  await fetchCategories();     // GET /api/v1/categories  → fills the categories table
+  await fetchTemplates();      // GET /api/v1/templates   → fills the templates table
+  await fetchLogs();           // GET /api/v1/logs        → fills the activity log
+  await fetchOverview();       // GET /api/v1/overview    → fills the metric cards
+}
+
+init();
+
+</script>
+</body>
+</html>

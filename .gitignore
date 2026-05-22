@@ -1,0 +1,56 @@
+# =====================================================================
+# Aurora LTS — repo ignore rules
+# =====================================================================
+
+# ── Secrets — NEVER commit ─────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*-credentials.json
+service-account*.json
+
+# ── Python build / venv ────────────────────────────────────────────────
+venv/
+env/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Local SQLite (production runs on Cloud SQL Postgres) ───────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── OS / editor cruft ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ── Agent / IDE local state ────────────────────────────────────────────
+.claude/
+.idea/
+.vscode/
+
+# ── Generated artifacts ────────────────────────────────────────────────
+*.zip
+*.tar.gz
+dist/
+build/
+
+# ── Local-only PDFs (re-generatable from /api/v1/admin/exec/...) ──────
+AURORA_LTS_Executive_Summary_*.pdf
+
+# Logs
+*.log
+logs/

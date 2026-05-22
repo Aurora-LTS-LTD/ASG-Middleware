@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>הצטרפות | אורורה אל.טי.אס. בע"מ — AURORA LTS LTD</title>
+
+  <!-- Tailwind via CDN (build step lands later) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Alpine.js for the multi-step state machine -->
+  <script defer src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js"></script>
+
+  <style>
+    body { font-family: 'Heebo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    [x-cloak] { display: none !important; }
+    .step-pill   { @apply rounded-full w-9 h-9 flex items-center justify-center text-sm font-semibold; }
+    .step-active { background: #6366f1; color: #fff; }
+    .step-done   { background: #10b981; color: #fff; }
+    .step-todo   { background: #e5e7eb; color: #6b7280; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-900" x-data="wizard()" x-cloak x-init="init()">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       HEADER  — Aurora branding
+       ═══════════════════════════════════════════════════════════ -->
+  <header class="bg-white border-b border-slate-200">
+    <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+          A
+        </div>
+        <div>
+          <div class="font-bold text-lg leading-tight">אורורה אל.טי.אס.</div>
+          <div class="text-xs text-slate-500 leading-tight">AURORA LTS LTD</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <button class="px-3 py-1 rounded border" :class="lang==='he' ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-slate-200 text-slate-600'" @click="setLang('he')">עברית</button>
+        <button class="px-3 py-1 rounded border" :class="lang==='ar' ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-slate-200 text-slate-600'" @click="setLang('ar')">العربية</button>
+        <button class="px-3 py-1 rounded border" :class="lang==='en' ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-slate-200 text-slate-600'" @click="setLang('en')">English</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       STEP INDICATOR
+       ═══════════════════════════════════════════════════════════ -->
+  <nav class="max-w-4xl mx-auto px-4 pt-6">
+    <div class="flex items-center justify-between gap-1">
+      <template x-for="(s, idx) in steps" :key="s.key">
+        <div class="flex-1 flex items-center gap-2">
+          <div class="step-pill"
+               :class="stepClass(s.key)"
+               x-text="completed.includes(s.key) ? '✓' : (idx + 1)"></div>
+          <div class="text-xs hidden sm:block flex-1" x-text="s.label[lang] || s.label.he"></div>
+          <template x-if="idx < steps.length - 1">
+            <div class="h-px bg-slate-300 flex-1"></div>
+          </template>
+        </div>
+      </template>
+    </div>
+    <div class="mt-3 text-sm text-slate-500" x-text="t('progressLine')"></div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MAIN CONTENT
+       ═══════════════════════════════════════════════════════════ -->
+  <main class="max-w-4xl mx-auto px-4 py-8">
+
+    <!-- Toast / global error -->
+    <template x-if="toast">
+      <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-lg shadow-lg"
+           :class="toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'">
+        <span x-text="toast.message"></span>
+      </div>
+    </template>
+
+    <!-- ─── STEP 0: Sign up (email + password) — only if not started ─── -->
+    <section x-show="!authToken" class="bg-white rounded-2xl shadow-sm border p-6 max-w-md mx-auto">
+      <h1 class="text-2xl font-bold mb-2" x-text="t('signupTitle')"></h1>
+      <p class="text-sm text-slate-600 mb-5" x-text="t('signupSubtitle')"></p>
+
+      <label class="block text-sm font-medium mb-1" x-text="t('email')"></label>
+      <input type="email" x-model="signup.email" autocomplete="email" inputmode="email"
+             class="w-full mb-3 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-300" />
+
+      <label class="block text-sm font-medium mb-1" x-text="t('password')"></label>
+      <input type="password" x-model="signup.password" autocomplete="new-password"
+             class="w-full mb-4 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-300" />
+
+      <button @click="doSignup()" :disabled="busy"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-medium disabled:opacity-50">
+        <span x-text="busy ? t('working') : t('continue')"></span>
+      </button>
+      <p class="text-xs text-slate-400 mt-3" x-text="t('signupNotice')"></p>
+    </section>
+
+    <!-- ─── STEP 1: Identity ─── -->
+    <section x-show="authToken && step === 'identity'" class="bg-white rounded-2xl shadow-sm border p-6">
+      <h2 class="text-xl font-bold mb-4" x-text="t('identityTitle')"></h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1" x-text="t('firstName')"></label>
+          <input x-model="identity.first_name"
+                 class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" x-text="t('lastName')"></label>
+          <input x-model="identity.last_name"
+                 class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+
+        <div class="sm:col-span-2">
+          <label class="block text-sm font-medium mb-1" x-text="t('legalStructure')"></label>
+          <select x-model="identity.legal_structure" class="w-full px-3 py-2 border rounded-lg">
+            <option value="">—</option>
+            <option value="osek_morshe">עוסק מורשה (Authorized Dealer)</option>
+            <option value="osek_patur">עוסק פטור (Exempt Dealer)</option>
+            <option value="chevra_baam">חברה בע"מ (Ltd Company)</option>
+          </select>
+        </div>
+
+        <div class="sm:col-span-2">
+          <label class="block text-sm font-medium mb-1" x-text="t('taxId')"></label>
+          <input x-model="identity.tax_id" @input.debounce.400="validateTaxId()" inputmode="numeric"
+                 class="w-full px-3 py-2 border rounded-lg" dir="ltr" />
+          <div class="text-xs mt-1" :class="taxIdState.ok ? 'text-emerald-600' : 'text-red-600'"
+               x-text="taxIdState.message" x-show="identity.tax_id.length >= 5"></div>
+        </div>
+
+        <div class="sm:col-span-2">
+          <label class="block text-sm font-medium mb-1" x-text="t('businessName')"></label>
+          <input x-model="identity.display_name"
+                 class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" x-text="t('businessPhone')"></label>
+          <input x-model="identity.business_phone" placeholder="+9725..." dir="ltr"
+                 class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" x-text="t('businessEmail')"></label>
+          <input x-model="identity.business_email" type="email" dir="ltr"
+                 class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+
+        <div class="sm:col-span-2">
+          <label class="block text-sm font-medium mb-1" x-text="t('businessAddress')"></label>
+          <input x-model="identity.business_address"
+                 class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" x-text="t('city')"></label>
+          <input x-model="identity.city" class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" x-text="t('postalCode')"></label>
+          <input x-model="identity.postal_code" class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+      </div>
+
+      <div class="mt-6 flex justify-end">
+        <button @click="submitIdentity()" :disabled="busy || !taxIdState.ok"
+                class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg">
+          <span x-text="t('continue')"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ─── STEP 2: Phone OTP ─── -->
+    <section x-show="authToken && step === 'phone_otp'" class="bg-white rounded-2xl shadow-sm border p-6 max-w-md mx-auto">
+      <h2 class="text-xl font-bold mb-2" x-text="t('phoneTitle')"></h2>
+      <p class="text-sm text-slate-600 mb-4" x-text="t('phoneSubtitle')"></p>
+
+      <div x-show="!otp.phone.sent">
+        <label class="block text-sm font-medium mb-1" x-text="t('phoneE164')"></label>
+        <input x-model="otp.phone.target" placeholder="+9725..." dir="ltr"
+               class="w-full mb-4 px-3 py-2 border rounded-lg" />
+        <button @click="sendOtp('phone')" :disabled="busy"
+                class="w-full bg-indigo-600 text-white py-2.5 rounded-lg disabled:opacity-50">
+          <span x-text="busy ? t('working') : t('sendCode')"></span>
+        </button>
+      </div>
+
+      <div x-show="otp.phone.sent">
+        <p class="text-xs text-slate-500 mb-3" x-text="t('codeSentTo') + otp.phone.target_masked"></p>
+        <input x-model="otp.phone.code" maxlength="6" inputmode="numeric" dir="ltr"
+               class="w-full mb-3 px-3 py-3 border rounded-lg text-center text-2xl tracking-widest" />
+        <template x-if="otp.phone.dev_code">
+          <div class="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-3 py-2 rounded mb-3">
+            <strong>DEV ONLY:</strong> code = <code x-text="otp.phone.dev_code"></code>
+          </div>
+        </template>
+        <button @click="verifyOtp('phone')" :disabled="busy || otp.phone.code.length !== 6"
+                class="w-full bg-emerald-600 text-white py-2.5 rounded-lg disabled:opacity-50">
+          <span x-text="t('verify')"></span>
+        </button>
+        <button @click="otp.phone.sent = false" class="w-full mt-2 text-sm text-slate-500" x-text="t('changeNumber')"></button>
+      </div>
+    </section>
+
+    <!-- ─── STEP 3: Email OTP ─── -->
+    <section x-show="authToken && step === 'email_otp'" class="bg-white rounded-2xl shadow-sm border p-6 max-w-md mx-auto">
+      <h2 class="text-xl font-bold mb-2" x-text="t('emailTitle')"></h2>
+      <p class="text-sm text-slate-600 mb-4" x-text="t('emailSubtitle')"></p>
+
+      <div x-show="!otp.email.sent">
+        <label class="block text-sm font-medium mb-1" x-text="t('email')"></label>
+        <input x-model="otp.email.target" type="email" dir="ltr"
+               class="w-full mb-4 px-3 py-2 border rounded-lg" />
+        <button @click="sendOtp('email')" :disabled="busy"
+                class="w-full bg-indigo-600 text-white py-2.5 rounded-lg disabled:opacity-50">
+          <span x-text="busy ? t('working') : t('sendCode')"></span>
+        </button>
+      </div>
+
+      <div x-show="otp.email.sent">
+        <p class="text-xs text-slate-500 mb-3" x-text="t('codeSentTo') + otp.email.target_masked"></p>
+        <input x-model="otp.email.code" maxlength="6" inputmode="numeric" dir="ltr"
+               class="w-full mb-3 px-3 py-3 border rounded-lg text-center text-2xl tracking-widest" />
+        <template x-if="otp.email.dev_code">
+          <div class="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-3 py-2 rounded mb-3">
+            <strong>DEV ONLY:</strong> code = <code x-text="otp.email.dev_code"></code>
+          </div>
+        </template>
+        <button @click="verifyOtp('email')" :disabled="busy || otp.email.code.length !== 6"
+                class="w-full bg-emerald-600 text-white py-2.5 rounded-lg disabled:opacity-50">
+          <span x-text="t('verify')"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ─── STEP 4: Document Upload ─── -->
+    <section x-show="authToken && step === 'documents'" class="bg-white rounded-2xl shadow-sm border p-6">
+      <h2 class="text-xl font-bold mb-2" x-text="t('docsTitle')"></h2>
+      <p class="text-sm text-slate-600 mb-5" x-text="t('docsSubtitle')"></p>
+
+      <div class="space-y-4">
+        <template x-for="docType in requiredDocTypes" :key="docType">
+          <div class="border rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+              <div class="font-medium" x-text="docTypeLabel(docType)"></div>
+              <span x-show="docState[docType]?.status === 'pending_review'"
+                    class="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded">✓ הועלה</span>
+            </div>
+            <input type="file" accept="image/*,application/pdf" @change="uploadDoc(docType, $event)"
+                   :disabled="busy"
+                   class="block w-full text-sm" />
+            <div x-show="docState[docType]?.error" class="text-xs text-red-600 mt-2"
+                 x-text="docState[docType]?.error"></div>
+            <div x-show="docState[docType]?.progress" class="text-xs text-slate-500 mt-2"
+                 x-text="docState[docType]?.progress"></div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- ─── STEP 5: Plan ─── -->
+    <section x-show="authToken && step === 'plan'" class="bg-white rounded-2xl shadow-sm border p-6">
+      <h2 class="text-xl font-bold mb-2" x-text="t('planTitle')"></h2>
+      <p class="text-sm text-slate-600 mb-4" x-text="t('planSubtitle')"></p>
+
+      <div class="flex gap-2 mb-5 justify-center">
+        <template x-for="cycle in ['monthly','quarterly','annual']" :key="cycle">
+          <button class="px-4 py-2 rounded-lg border" :class="planChoice.cycle === cycle ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-300'"
+                  @click="planChoice.cycle = cycle">
+            <span x-text="t('cycle_' + cycle)"></span>
+            <span x-show="cycle === 'quarterly'" class="text-xs">(-5%)</span>
+            <span x-show="cycle === 'annual'" class="text-xs">(-15%)</span>
+          </button>
+        </template>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <template x-for="plan in ['starter','pro','enterprise']" :key="plan">
+          <div class="border rounded-2xl p-5 cursor-pointer transition"
+               :class="planChoice.plan === plan ? 'border-indigo-600 ring-2 ring-indigo-200 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'"
+               @click="planChoice.plan = plan">
+            <div class="font-bold text-lg" x-text="t('plan_' + plan)"></div>
+            <div class="my-3 text-3xl font-bold">
+              <span x-text="formatMoney(planAmount(plan, planChoice.cycle))"></span>
+              <span class="text-sm font-normal text-slate-500">+ מע״מ</span>
+            </div>
+            <div class="text-xs text-slate-500" x-text="t('cycle_' + planChoice.cycle)"></div>
+          </div>
+        </template>
+      </div>
+
+      <div class="mt-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg text-sm">
+        🎁 <span x-text="t('trialNotice')"></span>
+      </div>
+
+      <div class="mt-6 flex justify-end">
+        <button @click="submitPlan()" :disabled="busy || !planChoice.plan"
+                class="px-6 py-2.5 bg-indigo-600 text-white rounded-lg disabled:opacity-50">
+          <span x-text="t('continue')"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ─── STEP 6: Payment Method ─── -->
+    <section x-show="authToken && step === 'payment_method'" class="bg-white rounded-2xl shadow-sm border p-6 max-w-xl mx-auto">
+      <h2 class="text-xl font-bold mb-2" x-text="t('paymentTitle')"></h2>
+      <p class="text-sm text-slate-600 mb-4" x-text="t('paymentSubtitle')"></p>
+
+      <div class="flex gap-2 mb-4">
+        <button class="flex-1 px-4 py-2 rounded-lg border"
+                :class="payment.kind === 'credit_card' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-300'"
+                @click="payment.kind = 'credit_card'">💳 <span x-text="t('creditCard')"></span></button>
+        <button class="flex-1 px-4 py-2 rounded-lg border"
+                :class="payment.kind === 'direct_debit' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-300'"
+                @click="payment.kind = 'direct_debit'">🏦 <span x-text="t('directDebit')"></span></button>
+      </div>
+
+      <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-4">
+        ⚠️ <span x-text="t('payplusNotice')"></span>
+      </div>
+
+      <!-- Credit Card stub form -->
+      <div x-show="payment.kind === 'credit_card'" class="space-y-3">
+        <div>
+          <label class="block text-sm font-medium mb-1" x-text="t('cardLast4')"></label>
+          <input x-model="payment.cc.card_last4" maxlength="4" inputmode="numeric" dir="ltr"
+                 class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div class="flex gap-2">
+          <select x-model="payment.cc.card_brand" class="flex-1 px-3 py-2 border rounded-lg">
+            <option value="visa">Visa</option>
+            <option value="mastercard">Mastercard</option>
+            <option value="isracard">Isracard</option>
+            <option value="amex">Amex</option>
+            <option value="diners">Diners</option>
+          </select>
+          <input x-model.number="payment.cc.card_exp_month" placeholder="MM" maxlength="2" dir="ltr"
+                 class="w-20 px-3 py-2 border rounded-lg text-center" />
+          <input x-model.number="payment.cc.card_exp_year" placeholder="YYYY" maxlength="4" dir="ltr"
+                 class="w-28 px-3 py-2 border rounded-lg text-center" />
+        </div>
+        <input x-model="payment.cc.holder_name" :placeholder="t('holderName')"
+               class="w-full px-3 py-2 border rounded-lg" />
+      </div>
+
+      <!-- Direct Debit form -->
+      <div x-show="payment.kind === 'direct_debit'" class="space-y-3">
+        <div class="flex gap-2">
+          <input x-model="payment.dd.bank_code" :placeholder="t('bankCode')" maxlength="3" dir="ltr"
+                 class="w-24 px-3 py-2 border rounded-lg text-center" />
+          <input x-model="payment.dd.branch_code" :placeholder="t('branchCode')" maxlength="4" dir="ltr"
+                 class="w-28 px-3 py-2 border rounded-lg text-center" />
+          <input x-model="payment.dd.account_last4" :placeholder="t('accountLast4')" maxlength="4" dir="ltr"
+                 class="flex-1 px-3 py-2 border rounded-lg text-center" />
+        </div>
+        <input x-model="payment.dd.holder_name" :placeholder="t('holderName')"
+               class="w-full px-3 py-2 border rounded-lg" />
+        <p class="text-xs text-slate-500" x-text="t('mandateNotice')"></p>
+      </div>
+
+      <button @click="submitPaymentMethod()" :disabled="busy"
+              class="w-full mt-5 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg disabled:opacity-50">
+        <span x-text="busy ? t('working') : t('savePaymentMethod')"></span>
+      </button>
+    </section>
+
+    <!-- ─── STEP 7: Review & Activate ─── -->
+    <section x-show="authToken && step === 'review'" class="bg-white rounded-2xl shadow-sm border p-6">
+      <h2 class="text-xl font-bold mb-3" x-text="t('reviewTitle')"></h2>
+
+      <div class="space-y-3 text-sm border-b pb-4 mb-4">
+        <div><strong x-text="t('businessName') + ': '"></strong><span x-text="identity.display_name"></span></div>
+        <div><strong x-text="t('legalStructure') + ': '"></strong><span x-text="legalStructureLabel(identity.legal_structure)"></span></div>
+        <div><strong x-text="t('taxId') + ': '"></strong><span dir="ltr" x-text="identity.tax_id"></span></div>
+        <div><strong x-text="t('plan') + ': '"></strong>
+          <span x-text="t('plan_' + planChoice.plan) + ' / ' + t('cycle_' + planChoice.cycle)"></span>
+        </div>
+        <div><strong x-text="t('trialEnds') + ': '"></strong><span x-text="trialEndsDisplay"></span></div>
+      </div>
+
+      <label class="flex items-start gap-2 mb-3 text-sm">
+        <input type="checkbox" x-model="review.terms" class="mt-1" />
+        <span x-text="t('acceptTerms')"></span>
+      </label>
+      <label class="flex items-start gap-2 mb-4 text-sm">
+        <input type="checkbox" x-model="review.privacy" class="mt-1" />
+        <span x-text="t('acceptPrivacy')"></span>
+      </label>
+
+      <button @click="submitReviewAndActivate()" :disabled="busy || !review.terms || !review.privacy"
+              class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-bold disabled:opacity-50">
+        <span x-text="busy ? t('working') : t('activateAccount')"></span>
+      </button>
+    </section>
+
+    <!-- ─── STEP 8: Success ─── -->
+    <section x-show="step === 'active'" class="bg-white rounded-2xl shadow-sm border p-8 text-center">
+      <div class="text-5xl mb-3">🎉</div>
+      <h2 class="text-2xl font-bold mb-2" x-text="t('successTitle')"></h2>
+      <p class="text-sm text-slate-600 mb-6" x-text="t('successSubtitle')"></p>
+      <a href="/dashboard" class="inline-block px-6 py-2.5 bg-indigo-600 text-white rounded-lg" x-text="t('goToDashboard')"></a>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════════════════════════════ -->
+  <footer class="max-w-4xl mx-auto px-4 py-8 text-center text-xs text-slate-500">
+    <div>© 2026 אורורה אל.טי.אס. בע"מ — AURORA LTS LTD</div>
+    <div class="mt-1">
+      <a href="https://aurora-ltd.co.il/terms" class="hover:underline">תנאי שימוש</a> ·
+      <a href="https://aurora-ltd.co.il/privacy" class="hover:underline">מדיניות פרטיות</a> ·
+      <a href="https://aurora-ltd.co.il/contact" class="hover:underline">יצירת קשר</a>
+    </div>
+  </footer>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     ALPINE STATE + LOGIC
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+  function wizard() {
+    return {
+      // ── i18n ──
+      lang: 'he',
+      strings: {
+        he: {
+          progressLine: 'השלימו את ההצטרפות שלכם — ניתן להפסיק ולחזור בכל שלב',
+          signupTitle: 'הצטרפו לאורורה',
+          signupSubtitle: 'צרו חשבון בדקה אחת — שלב הזיהוי הבא',
+          email: 'דוא"ל',
+          password: 'סיסמה',
+          continue: 'המשך',
+          working: 'עובד...',
+          signupNotice: 'בלחיצה על המשך אתם מאשרים שאתם מעל גיל 18 ובעלי הרשאה לפתוח עוסק/חברה',
+          identityTitle: 'פרטי זיהוי וזהות עסקית',
+          firstName: 'שם פרטי',
+          lastName: 'שם משפחה',
+          legalStructure: 'מבנה משפטי',
+          taxId: 'ח.פ. / ת.ז. / מס׳ עוסק',
+          businessName: 'שם העסק',
+          businessPhone: 'טלפון העסק',
+          businessEmail: 'דוא"ל העסק',
+          businessAddress: 'כתובת',
+          city: 'עיר',
+          postalCode: 'מיקוד',
+          phoneTitle: 'אימות מספר טלפון',
+          phoneSubtitle: 'נשלח לכם קוד SMS בן 6 ספרות',
+          phoneE164: 'מספר טלפון נייד (E.164, +9725...)',
+          sendCode: 'שלח קוד',
+          codeSentTo: 'נשלח קוד אל ',
+          verify: 'אמת',
+          changeNumber: 'שינוי מספר',
+          emailTitle: 'אימות דוא"ל',
+          emailSubtitle: 'נשלח לכם קוד דוא"ל בן 6 ספרות',
+          docsTitle: 'מסמכי זיהוי',
+          docsSubtitle: 'העלו את המסמכים הנדרשים לפי המבנה המשפטי שבחרתם',
+          planTitle: 'בחרו תוכנית',
+          planSubtitle: '14 יום ניסיון חינם — ניתן לבטל בכל עת',
+          plan_starter: 'התחלה',
+          plan_pro: 'מקצועי',
+          plan_enterprise: 'ארגוני',
+          cycle_monthly: 'חודשי',
+          cycle_quarterly: 'רבעוני',
+          cycle_annual: 'שנתי',
+          trialNotice: 'אנו לא נחייב אתכם במשך 14 ימי הניסיון. החיוב הראשון יתבצע ביום ה-15.',
+          paymentTitle: 'אמצעי תשלום',
+          paymentSubtitle: 'אנו לא שומרים את פרטי הכרטיס שלכם — הם מאוחסנים ב-PayPlus',
+          creditCard: 'כרטיס אשראי',
+          directDebit: 'הוראת קבע',
+          payplusNotice: 'הסביבה הנוכחית במצב STUB — הפרטים הם הצהרתיים בלבד ולא מבוצע חיוב אמיתי. הפעלת PayPlus תתבצע כשהפרטים יסופקו.',
+          cardLast4: '4 ספרות אחרונות של הכרטיס',
+          holderName: 'שם בעל הכרטיס/חשבון',
+          bankCode: 'בנק',
+          branchCode: 'סניף',
+          accountLast4: '4 אחרונות',
+          mandateNotice: 'בלחיצה על המשך אתם מאשרים הוראת קבע להוצאות חודשיות של אורורה',
+          savePaymentMethod: 'שמור והמשך',
+          reviewTitle: 'סיכום והפעלה',
+          plan: 'תוכנית',
+          trialEnds: 'סיום תקופת ניסיון',
+          acceptTerms: 'אני מאשר/ת את תנאי השימוש',
+          acceptPrivacy: 'אני מאשר/ת את מדיניות הפרטיות',
+          activateAccount: 'הפעל את החשבון',
+          successTitle: 'הצטרפותכם הושלמה!',
+          successSubtitle: 'תקבלו דוא"ל אישור. ניתן להתחיל לעבוד מהדאשבורד מיד.',
+          goToDashboard: 'מעבר לדאשבורד',
+        },
+        ar: {
+          progressLine: 'أكمل التسجيل — يمكنك التوقف والعودة لاحقاً',
+          signupTitle: 'انضم إلى أورورا',
+          signupSubtitle: 'أنشئ حساباً في دقيقة — التحقق من الهوية في الخطوة التالية',
+          email: 'البريد الإلكتروني',
+          password: 'كلمة السر',
+          continue: 'متابعة',
+          working: 'جارٍ...',
+          signupNotice: 'بالنقر على متابعة فإنك تؤكد أنك بالغ ولديك صلاحية فتح عمل تجاري',
+          identityTitle: 'تفاصيل الهوية والعمل',
+          firstName: 'الاسم الأول',
+          lastName: 'اسم العائلة',
+          legalStructure: 'الكيان القانوني',
+          taxId: 'رقم الشركة / الهوية / المتعامل',
+          businessName: 'اسم العمل',
+          businessPhone: 'هاتف العمل',
+          businessEmail: 'بريد العمل',
+          businessAddress: 'العنوان',
+          city: 'المدينة',
+          postalCode: 'الرمز البريدي',
+          phoneTitle: 'تحقق من رقم الهاتف',
+          phoneSubtitle: 'سنرسل رمز SMS من 6 أرقام',
+          phoneE164: 'رقم الجوال (E.164, +9725...)',
+          sendCode: 'أرسل الرمز',
+          codeSentTo: 'تم إرسال الرمز إلى ',
+          verify: 'تحقق',
+          changeNumber: 'تغيير الرقم',
+          emailTitle: 'تحقق من البريد الإلكتروني',
+          emailSubtitle: 'سنرسل رمزاً من 6 أرقام عبر البريد',
+          docsTitle: 'وثائق الهوية',
+          docsSubtitle: 'حمّل الوثائق المطلوبة حسب الكيان القانوني',
+          planTitle: 'اختر خطة',
+          planSubtitle: '14 يوماً تجربة مجانية — يمكنك الإلغاء في أي وقت',
+          plan_starter: 'البداية',
+          plan_pro: 'احترافي',
+          plan_enterprise: 'مؤسسي',
+          cycle_monthly: 'شهري',
+          cycle_quarterly: 'ربع سنوي',
+          cycle_annual: 'سنوي',
+          trialNotice: 'لن نقوم بأي خصم خلال 14 يوماً. الدفعة الأولى في اليوم الخامس عشر.',
+          paymentTitle: 'وسيلة الدفع',
+          paymentSubtitle: 'نحن لا نحفظ تفاصيل بطاقتك — تُحفظ في PayPlus',
+          creditCard: 'بطاقة ائتمان',
+          directDebit: 'حوالة مصرفية ثابتة',
+          payplusNotice: 'الوضع الحالي تجريبي — لا يتم خصم فعلي. سيتم التفعيل عند توفير بيانات PayPlus.',
+          cardLast4: 'آخر 4 أرقام من البطاقة',
+          holderName: 'اسم صاحب البطاقة/الحساب',
+          bankCode: 'البنك',
+          branchCode: 'الفرع',
+          accountLast4: 'آخر 4 أرقام',
+          mandateNotice: 'بالنقر على متابعة توافق على الحوالة الثابتة لأورورا',
+          savePaymentMethod: 'حفظ ومتابعة',
+          reviewTitle: 'الملخص والتفعيل',
+          plan: 'الخطة',
+          trialEnds: 'نهاية فترة التجربة',
+          acceptTerms: 'أوافق على شروط الاستخدام',
+          acceptPrivacy: 'أوافق على سياسة الخصوصية',
+          activateAccount: 'تفعيل الحساب',
+          successTitle: 'تم التسجيل بنجاح!',
+          successSubtitle: 'سيصلك بريد تأكيد. يمكنك البدء فوراً من لوحة التحكم.',
+          goToDashboard: 'إلى لوحة التحكم',
+        },
+        en: {
+          progressLine: 'Complete your onboarding — you can stop and resume any time',
+          signupTitle: 'Join Aurora',
+          signupSubtitle: 'Create an account in a minute. Identity verification is the next step.',
+          email: 'Email',
+          password: 'Password',
+          continue: 'Continue',
+          working: 'Working...',
+          signupNotice: 'By clicking Continue you confirm you are an authorized signatory.',
+          identityTitle: 'Identity & business details',
+          firstName: 'First name',
+          lastName: 'Last name',
+          legalStructure: 'Legal structure',
+          taxId: 'Tax ID / Company ID',
+          businessName: 'Business name',
+          businessPhone: 'Business phone',
+          businessEmail: 'Business email',
+          businessAddress: 'Business address',
+          city: 'City',
+          postalCode: 'Postal code',
+          phoneTitle: 'Verify your phone',
+          phoneSubtitle: "We'll send a 6-digit SMS code",
+          phoneE164: 'Mobile number (E.164, +9725...)',
+          sendCode: 'Send code',
+          codeSentTo: 'Code sent to ',
+          verify: 'Verify',
+          changeNumber: 'Change number',
+          emailTitle: 'Verify your email',
+          emailSubtitle: "We'll send a 6-digit code by email",
+          docsTitle: 'Identity documents',
+          docsSubtitle: 'Upload the documents required for your legal structure',
+          planTitle: 'Pick a plan',
+          planSubtitle: '14-day free trial — cancel any time',
+          plan_starter: 'Starter',
+          plan_pro: 'Pro',
+          plan_enterprise: 'Enterprise',
+          cycle_monthly: 'Monthly',
+          cycle_quarterly: 'Quarterly',
+          cycle_annual: 'Annual',
+          trialNotice: 'You will not be charged during the 14-day trial. First charge is on day 15.',
+          paymentTitle: 'Payment method',
+          paymentSubtitle: 'We never store your card details — PayPlus does.',
+          creditCard: 'Credit card',
+          directDebit: 'Direct debit',
+          payplusNotice: 'STUB MODE — no real charges. Live PayPlus activates when credentials are provisioned.',
+          cardLast4: 'Card last 4 digits',
+          holderName: 'Cardholder / account holder',
+          bankCode: 'Bank',
+          branchCode: 'Branch',
+          accountLast4: 'Last 4',
+          mandateNotice: 'By continuing you authorize a recurring direct debit to Aurora.',
+          savePaymentMethod: 'Save & continue',
+          reviewTitle: 'Review & activate',
+          plan: 'Plan',
+          trialEnds: 'Trial ends',
+          acceptTerms: 'I accept the Terms of Service',
+          acceptPrivacy: 'I accept the Privacy Notice',
+          activateAccount: 'Activate account',
+          successTitle: 'Welcome aboard!',
+          successSubtitle: 'A confirmation email is on its way. You can start using the dashboard now.',
+          goToDashboard: 'Go to dashboard',
+        },
+      },
+
+      // ── App state ──
+      busy: false,
+      toast: null,
+      authToken: localStorage.getItem('aurora_jwt') || null,
+      step: 'identity',
+      completed: [],
+      stateId: null,
+      trialEndsDisplay: '',
+
+      steps: [
+        { key: 'identity',       label: { he: 'זיהוי',    ar: 'الهوية',  en: 'Identity' } },
+        { key: 'phone_otp',      label: { he: 'טלפון',    ar: 'الهاتف',  en: 'Phone' } },
+        { key: 'email_otp',      label: { he: 'דוא"ל',    ar: 'الإيميل', en: 'Email' } },
+        { key: 'documents',      label: { he: 'מסמכים',   ar: 'وثائق',   en: 'Docs' } },
+        { key: 'plan',           label: { he: 'תוכנית',   ar: 'خطة',     en: 'Plan' } },
+        { key: 'payment_method', label: { he: 'תשלום',    ar: 'دفع',     en: 'Pay' } },
+        { key: 'review',         label: { he: 'סיכום',    ar: 'ملخص',    en: 'Review' } },
+      ],
+
+      signup: { email: '', password: '' },
+      identity: {
+        first_name: '', last_name: '',
+        legal_structure: '', tax_id: '', display_name: '',
+        business_phone: '', business_email: '',
+        business_address: '', city: '', postal_code: '',
+      },
+      taxIdState: { ok: false, message: '' },
+      otp: {
+        phone: { target: '', code: '', sent: false, target_masked: '', dev_code: null },
+        email: { target: '', code: '', sent: false, target_masked: '', dev_code: null },
+      },
+      docState: {},
+      plans: [],
+      planChoice: { plan: 'starter', cycle: 'monthly' },
+      payment: {
+        kind: 'credit_card',
+        cc: { card_last4: '', card_brand: 'visa', card_exp_month: '', card_exp_year: '', holder_name: '' },
+        dd: { bank_code: '', branch_code: '', account_last4: '', holder_name: '' },
+      },
+      review: { terms: false, privacy: false },
+
+      // ─── i18n + helpers ───
+      t(key) { return (this.strings[this.lang] || this.strings.he)[key] || key; },
+      setLang(l) {
+        this.lang = l;
+        document.documentElement.dir = (l === 'en') ? 'ltr' : 'rtl';
+        document.documentElement.lang = l;
+      },
+      stepClass(key) {
+        if (this.step === key) return 'step-active';
+        if (this.completed.includes(key)) return 'step-done';
+        return 'step-todo';
+      },
+      legalStructureLabel(v) {
+        return { osek_morshe: 'עוסק מורשה', osek_patur: 'עוסק פטור', chevra_baam: 'חברה בע"מ' }[v] || v;
+      },
+      docTypeLabel(t) {
+        return {
+          israeli_id_front:        'תעודת זהות — צד קדמי',
+          israeli_id_back:         'תעודת זהות — צד אחורי',
+          business_certificate:    'אישור עוסק / רישיון עסק',
+          company_registry_extract:'נסח רשם החברות',
+          vat_certificate:         'אישור עוסק מורשה',
+          signature_card:          'כרטיס דוגמת חתימות',
+        }[t] || t;
+      },
+      formatMoney(minor) {
+        return '₪' + (minor / 100).toLocaleString('he-IL', { minimumFractionDigits: 0 });
+      },
+      planAmount(plan, cycle) {
+        const found = this.plans.find(p => p.plan === plan && p.billing_cycle === cycle);
+        return found ? found.cycle_amount_minor_units : 0;
+      },
+      get requiredDocTypes() {
+        const map = {
+          osek_morshe: ['israeli_id_front', 'israeli_id_back', 'business_certificate'],
+          osek_patur:  ['israeli_id_front', 'israeli_id_back', 'business_certificate'],
+          chevra_baam: ['israeli_id_front', 'israeli_id_back', 'company_registry_extract'],
+        };
+        return map[this.identity.legal_structure] || [];
+      },
+      flash(message, type) {
+        this.toast = { message, type: type || 'info' };
+        setTimeout(() => { this.toast = null; }, 3500);
+      },
+
+      // ─── HTTP plumbing ───
+      async api(path, opts = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+        if (this.authToken) headers['Authorization'] = 'Bearer ' + this.authToken;
+        const res = await fetch(path, { ...opts, headers });
+        if (!res.ok) {
+          let msg = res.statusText;
+          try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+          throw new Error(msg);
+        }
+        if (res.status === 204) return null;
+        return res.json();
+      },
+
+      // ─── Init ───
+      async init() {
+        try {
+          const plans = await this.api('/api/v1/onboarding/plans');
+          this.plans = plans.plans;
+        } catch (e) { /* non-fatal */ }
+        if (this.authToken) await this.refreshState();
+      },
+
+      async refreshState() {
+        try {
+          const s = await this.api('/api/v1/onboarding/state');
+          this.step = s.current_step;
+          this.completed = s.completed_steps || [];
+          this.stateId = s.state_id;
+          if (s.draft_payload?.identity) Object.assign(this.identity, s.draft_payload.identity);
+          if (s.draft_payload?.plan) this.planChoice.plan = s.draft_payload.plan;
+          if (s.draft_payload?.billing_cycle) this.planChoice.cycle = s.draft_payload.billing_cycle;
+          if (s.user?.phone_verified_at && this.step === 'phone_otp') this.step = 'email_otp';
+        } catch (e) {
+          // No state yet — show signup
+          this.authToken = null;
+          localStorage.removeItem('aurora_jwt');
+        }
+      },
+
+      // ─── Signup ───
+      async doSignup() {
+        if (!this.signup.email || !this.signup.password) {
+          this.flash('הזן דוא"ל וסיסמה', 'error'); return;
+        }
+        this.busy = true;
+        try {
+          const r = await this.api('/api/v1/onboarding/start', {
+            method: 'POST',
+            body: JSON.stringify({
+              email: this.signup.email,
+              password: this.signup.password,
+              language_pref: this.lang,
+              surface: 'web',
+            }),
+          });
+          this.authToken = r.access_token;
+          localStorage.setItem('aurora_jwt', this.authToken);
+          this.step = r.onboarding.current_step;
+          this.completed = r.onboarding.completed_steps || [];
+          this.flash(r.resumed ? 'ממשיכים מהמקום שעצרנו' : 'נרשמנו!', 'success');
+        } catch (e) {
+          this.flash(e.message, 'error');
+        } finally { this.busy = false; }
+      },
+
+      // ─── Tax-id live validation ───
+      async validateTaxId() {
+        if (!this.identity.tax_id || this.identity.tax_id.length < 5) {
+          this.taxIdState = { ok: false, message: '' }; return;
+        }
+        try {
+          const r = await fetch('/api/v1/utils/validate-tax-id?value=' + encodeURIComponent(this.identity.tax_id));
+          const j = await r.json();
+          if (j.valid) {
+            this.taxIdState = { ok: true, message: '✓ תקין (' + (j.inferred_legal_structure || '?') + ')' };
+            // Auto-fill the inferred legal_structure if user hasn't picked one
+            if (!this.identity.legal_structure && j.inferred_legal_structure) {
+              this.identity.legal_structure = j.inferred_legal_structure;
+            }
+          } else {
+            this.taxIdState = { ok: false, message: '✗ ספרת בקרה לא תקינה' };
+          }
+        } catch (e) { this.taxIdState = { ok: false, message: 'שגיאה' }; }
+      },
+
+      // ─── Submit identity ───
+      async submitIdentity() {
+        this.busy = true;
+        try {
+          const r = await this.api('/api/v1/onboarding/identity', {
+            method: 'POST', body: JSON.stringify(this.identity),
+          });
+          this.step = r.current_step;
+          if (!this.completed.includes('identity')) this.completed.push('identity');
+        } catch (e) { this.flash(e.message, 'error'); }
+        finally { this.busy = false; }
+      },
+
+      // ─── OTP send + verify ───
+      async sendOtp(channel) {
+        const cell = this.otp[channel];
+        if (!cell.target) { this.flash('הזן יעד', 'error'); return; }
+        this.busy = true;
+        try {
+          const r = await this.api('/api/v1/onboarding/' + channel + '/send-otp', {
+            method: 'POST', body: JSON.stringify({ target: cell.target }),
+          });
+          cell.sent = true;
+          cell.target_masked = r.target_masked;
+          cell.dev_code = r.dev_only_code || null;  // shows in dev only
+          this.flash('הקוד נשלח', 'success');
+        } catch (e) { this.flash(e.message, 'error'); }
+        finally { this.busy = false; }
+      },
+      async verifyOtp(channel) {
+        const cell = this.otp[channel];
+        this.busy = true;
+        try {
+          const r = await this.api('/api/v1/onboarding/' + channel + '/verify-otp', {
+            method: 'POST', body: JSON.stringify({ target: cell.target, code: cell.code }),
+          });
+          this.step = r.current_step;
+          if (!this.completed.includes(channel + '_otp')) this.completed.push(channel + '_otp');
+          this.flash('אומת בהצלחה', 'success');
+        } catch (e) { this.flash(e.message, 'error'); }
+        finally { this.busy = false; }
+      },
+
+      // ─── Document upload ───
+      async uploadDoc(docType, ev) {
+        const file = ev.target.files[0];
+        if (!file) return;
+        this.docState[docType] = { progress: 'מתחיל...', error: null };
+        this.busy = true;
+        try {
+          // Step 1: init upload
+          const init = await this.api('/api/v1/onboarding/documents/init-upload', {
+            method: 'POST',
+            body: JSON.stringify({
+              document_type: docType,
+              mime_type: file.type || 'application/octet-stream',
+              bytes_size: file.size,
+            }),
+          });
+
+          // Step 2: PUT bytes to the (stub) signed URL
+          this.docState[docType].progress = 'מעלה קובץ...';
+          const putRes = await fetch(init.upload_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+            body: file,
+          });
+          if (!putRes.ok) throw new Error('upload PUT failed: ' + putRes.status);
+
+          // Step 3: finalize
+          this.docState[docType].progress = 'מאמת...';
+          const fin = await this.api('/api/v1/onboarding/documents/finalize', {
+            method: 'POST', body: JSON.stringify({ doc_id: init.doc_id }),
+          });
+          this.docState[docType] = { status: fin.status, progress: null, error: null };
+
+          if (fin.advanced_to_next_step) {
+            await this.refreshState();
+            this.flash('כל המסמכים הועלו!', 'success');
+          } else {
+            this.flash('הקובץ הועלה', 'success');
+          }
+        } catch (e) {
+          this.docState[docType] = { error: e.message, progress: null };
+        } finally { this.busy = false; }
+      },
+
+      // ─── Plan selection ───
+      async submitPlan() {
+        this.busy = true;
+        try {
+          const r = await this.api('/api/v1/onboarding/billing/plan', {
+            method: 'POST', body: JSON.stringify({
+              plan: this.planChoice.plan, billing_cycle: this.planChoice.cycle,
+            }),
+          });
+          this.step = r.current_step;
+          if (!this.completed.includes('plan')) this.completed.push('plan');
+        } catch (e) { this.flash(e.message, 'error'); }
+        finally { this.busy = false; }
+      },
+
+      // ─── Payment method ───
+      async submitPaymentMethod() {
+        this.busy = true;
+        try {
+          const tokenization_payload = this.payment.kind === 'credit_card'
+            ? this.payment.cc
+            : this.payment.dd;
+          const r = await this.api('/api/v1/onboarding/billing/payment-method', {
+            method: 'POST',
+            body: JSON.stringify({ kind: this.payment.kind, tokenization_payload }),
+          });
+          this.step = r.current_step;
+          if (!this.completed.includes('payment_method')) this.completed.push('payment_method');
+        } catch (e) { this.flash(e.message, 'error'); }
+        finally { this.busy = false; }
+      },
+
+      // ─── Review + Activate (combined to minimize taps) ───
+      async submitReviewAndActivate() {
+        this.busy = true;
+        try {
+          await this.api('/api/v1/onboarding/review', {
+            method: 'POST',
+            body: JSON.stringify({ terms_accepted: true, privacy_accepted: true }),
+          });
+          const r = await this.api('/api/v1/onboarding/activate', { method: 'POST' });
+          this.step = 'active';
+          this.completed = [...this.completed, 'review', 'active'];
+          this.trialEndsDisplay = r.trial_ends_at
+            ? new Date(r.trial_ends_at).toLocaleDateString('he-IL') : '';
+          // Refresh JWT with full org context
+          if (r.access_token) {
+            this.authToken = r.access_token;
+            localStorage.setItem('aurora_jwt', this.authToken);
+          }
+          this.flash('החשבון הופעל!', 'success');
+        } catch (e) { this.flash(e.message, 'error'); }
+        finally { this.busy = false; }
+      },
+    };
+  }
+</script>
+</body>
+</html>

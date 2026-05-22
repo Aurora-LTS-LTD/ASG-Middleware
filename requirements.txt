@@ -1,0 +1,41 @@
+fastapi
+uvicorn
+sqlalchemy
+httpx
+python-multipart
+python-dotenv
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt<5
+weasyprint
+qrcode[pil]
+jinja2
+# Phase 4: Telegram Bot
+python-telegram-bot>=21.0
+
+# ── Production additions (Part III — GCP Deployment) ──
+# psycopg[binary] is the Postgres driver for Cloud SQL.
+# When DATABASE_URL points at sqlite:// (dev), this dep is unused.
+psycopg[binary]>=3.2,<4
+# gunicorn fronts Uvicorn in the production container — gives us
+# multi-worker process management, graceful reload, and timeout control
+# without rewriting the asyncio core.
+gunicorn>=23.0,<24
+
+# ── Sprint 2 — Document AI Receipt Pipeline ──
+# All three are LAZY-IMPORTED inside services/gcp/*.py — when the
+# corresponding *_BACKEND env is 'stub' (default), these are never loaded
+# at runtime. They DO ship inside the image so a single env-flag flip
+# activates production behavior without redeploy.
+google-cloud-storage>=2.16,<3
+google-cloud-documentai>=2.27,<3
+google-cloud-dlp>=3.20,<4
+
+# ── Sprint 3 — Secret Manager (lazy-imported when SECRET_BACKEND=gcp) ──
+google-cloud-secret-manager>=2.20,<3
+
+# ── Sprint 6 — BigQuery audit pipeline (lazy-imported) ──
+google-cloud-bigquery>=3.20,<4
+
+# ── Product Upgrade #1 — Gemini Flash via Vertex AI (lazy-imported) ──
+google-cloud-aiplatform>=1.55,<2

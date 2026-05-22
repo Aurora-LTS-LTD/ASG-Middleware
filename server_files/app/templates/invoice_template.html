@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html dir="{{ direction }}" lang="{{ lang }}">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    /* ── Font Loading ─────────────────────────────────────────
+       We embed the Noto fonts so WeasyPrint can render Arabic
+       and Hebrew characters correctly with proper shaping.
+       Pango (used by WeasyPrint) joins Arabic letters correctly
+       (initial, medial, final, isolated forms) automatically.
+    ─────────────────────────────────────────────────────────── */
+    @font-face {
+      font-family: 'NotoArabic';
+      src: url('{{ font_arabic }}');
+    }
+    @font-face {
+      font-family: 'NotoHebrew';
+      src: url('{{ font_hebrew }}');
+    }
+
+    /* ── Page Setup ──────────────────────────────────────────── */
+    @page {
+      size: A4;
+      margin: 18mm 15mm 18mm 15mm;
+    }
+
+    /* ── Base ────────────────────────────────────────────────── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: {% if lang == 'ar' %}'NotoArabic', {% elif lang == 'he' %}'NotoHebrew', {% endif %}Arial, sans-serif;
+      direction: {{ direction }};
+      font-size: 10pt;
+      color: #1e293b;
+      line-height: 1.5;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 3px solid #4f6ef7;
+      padding-bottom: 14px;
+      margin-bottom: 20px;
+    }
+
+    .business-name {
+      font-size: 20pt;
+      font-weight: bold;
+      color: #4f6ef7;
+    }
+    .business-details {
+      font-size: 8.5pt;
+      color: #64748b;
+      margin-top: 4px;
+      line-height: 1.6;
+    }
+
+    .invoice-meta {
+      text-align: {{ 'left' if direction == 'rtl' else 'right' }};
+    }
+    .invoice-title {
+      font-size: 16pt;
+      font-weight: bold;
+      color: #1e293b;
+    }
+    .invoice-number {
+      font-size: 10pt;
+      color: #64748b;
+      margin-top: 4px;
+    }
+    .invoice-date {
+      font-size: 9pt;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    /* ── Beneficiary Block ───────────────────────────────────── */
+    .section-label {
+      font-size: 7.5pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    .beneficiary-block {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+    }
+    .beneficiary-name {
+      font-size: 12pt;
+      font-weight: bold;
+      color: #0f172a;
+    }
+    .beneficiary-sub {
+      font-size: 9pt;
+      color: #64748b;
+      margin-top: 3px;
+    }
+
+    /* ── Amount Table ────────────────────────────────────────── */
+    .amount-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    .amount-table th {
+      background: #1e293b;
+      color: #ffffff;
+      font-size: 8.5pt;
+      font-weight: 600;
+      padding: 9px 12px;
+      text-align: {{ 'right' if direction == 'rtl' else 'left' }};
+    }
+    .amount-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 10pt;
+    }
+    .amount-table tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+    .amount-table .num {
+      text-align: {{ 'left' if direction == 'rtl' else 'right' }};
+      font-variant-numeric: tabular-nums;
+      direction: ltr;  /* numbers always LTR */
+    }
+    .total-row td {
+      background: #eff6ff !important;
+      font-weight: bold;
+      font-size: 11pt;
+      border-top: 2px solid #4f6ef7;
+      color: #1e40af;
+    }
+
+    /* ── Allocation Block ───────────────────────────────────── */
+    .allocation-block {
+      border: 1.5px solid #22c55e;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 20px;
+      background: #f0fdf4;
+    }
+    .allocation-label {
+      font-size: 8.5pt;
+      color: #15803d;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .allocation-number {
+      font-size: 14pt;
+      font-weight: bold;
+      color: #15803d;
+      letter-spacing: 2px;
+      direction: ltr;
+    }
+
+    .no-allocation-block {
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px 14px;
+      margin-bottom: 20px;
+      background: #f8fafc;
+      font-size: 8.5pt;
+      color: #94a3b8;
+    }
+
+    /* ── Payment Status ─────────────────────────────────────── */
+    .payment-block {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .pay-stat {
+      flex: 1;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 9px 12px;
+      text-align: center;
+    }
+    .pay-stat-label {
+      font-size: 7.5pt;
+      color: #94a3b8;
+      text-transform: uppercase;
+    }
+    .pay-stat-value {
+      font-size: 11pt;
+      font-weight: bold;
+      color: #0f172a;
+      direction: ltr;
+    }
+    .pay-stat-value.paid { color: #15803d; }
+    .pay-stat-value.overdue { color: #dc2626; }
+
+    /* ── QR + Footer ────────────────────────────────────────── */
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: 24px;
+      padding-top: 14px;
+      border-top: 1px solid #e2e8f0;
+    }
+    .qr-block img {
+      width: 72px;
+      height: 72px;
+    }
+    .qr-label {
+      font-size: 7pt;
+      color: #94a3b8;
+      text-align: center;
+      margin-top: 3px;
+    }
+    .footer-text {
+      font-size: 7.5pt;
+      color: #94a3b8;
+      text-align: {{ 'left' if direction == 'rtl' else 'right' }};
+      line-height: 1.7;
+    }
+    .footer-brand {
+      font-weight: bold;
+      color: #4f6ef7;
+    }
+
+    /* ── Description ────────────────────────────────────────── */
+    .description-block {
+      border-{{ 'right' if direction == 'rtl' else 'left' }}: 3px solid #4f6ef7;
+      padding-{{ 'right' if direction == 'rtl' else 'left' }}: 10px;
+      margin-bottom: 18px;
+      font-size: 9pt;
+      color: #475569;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     HEADER — Business name + Invoice number
+══════════════════════════════════════════════════ -->
+<div class="header">
+  <div>
+    <div class="business-name">{{ business.name }}</div>
+    <div class="business-details">
+      {% if business.tax_id %}{{ tax_id_label }}: {{ business.tax_id }}<br>{% endif %}
+      {% if business.address %}{{ business.address }}<br>{% endif %}
+    </div>
+  </div>
+  <div class="invoice-meta">
+    <div class="invoice-title">{{ invoice_title }}</div>
+    <div class="invoice-number">{{ invoice_number_label }}: {{ invoice.invoice_number }}</div>
+    <div class="invoice-date">{{ date_label }}: {{ invoice_date }}</div>
+    {% if invoice.due_date %}
+    <div class="invoice-date">{{ due_date_label }}: {{ due_date }}</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     BENEFICIARY — Who this invoice is issued to
+══════════════════════════════════════════════════ -->
+<div class="section-label">{{ to_label }}</div>
+<div class="beneficiary-block">
+  <div class="beneficiary-name">{{ invoice.beneficiary_name }}</div>
+  <div class="beneficiary-sub">
+    {% if invoice.beneficiary_tax_id %}{{ tax_id_label }}: {{ invoice.beneficiary_tax_id }}{% endif %}
+    {% if invoice.beneficiary_contact %} &nbsp;|&nbsp; {{ invoice.beneficiary_contact }}{% endif %}
+  </div>
+</div>
+
+<!-- Description (if any) -->
+{% if invoice.description %}
+<div class="description-block">{{ invoice.description }}</div>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════
+     AMOUNT TABLE — Net → VAT → Total
+══════════════════════════════════════════════════ -->
+<table class="amount-table">
+  <thead>
+    <tr>
+      <th>{{ item_label }}</th>
+      <th class="num">{{ amount_label }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>{{ subtotal_label }}</td>
+      <td class="num">{{ "%.2f"|format(invoice.amount_net) }} {{ invoice.currency }}</td>
+    </tr>
+    <tr>
+      <td>{{ vat_label }} ({{ (invoice.vat_rate * 100)|int }}%)</td>
+      <td class="num">{{ "%.2f"|format(invoice.vat_amount) }} {{ invoice.currency }}</td>
+    </tr>
+    <tr class="total-row">
+      <td>{{ total_label }}</td>
+      <td class="num">{{ "%.2f"|format(invoice.amount_total) }} {{ invoice.currency }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════
+     ALLOCATION NUMBER
+══════════════════════════════════════════════════ -->
+{% if invoice.allocation_number %}
+<div class="allocation-block">
+  <div class="allocation-label">{{ allocation_label }}</div>
+  <div class="allocation-number">{{ invoice.allocation_number }}</div>
+</div>
+{% else %}
+<div class="no-allocation-block">
+  {{ no_allocation_label }}
+</div>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════
+     PAYMENT STATUS
+══════════════════════════════════════════════════ -->
+<div class="payment-block">
+  <div class="pay-stat">
+    <div class="pay-stat-label">{{ paid_label }}</div>
+    <div class="pay-stat-value {{ 'paid' if invoice.amount_paid >= invoice.amount_total else '' }}">
+      {{ "%.2f"|format(invoice.amount_paid or 0) }} {{ invoice.currency }}
+    </div>
+  </div>
+  <div class="pay-stat">
+    <div class="pay-stat-label">{{ remaining_label }}</div>
+    <div class="pay-stat-value">
+      {{ "%.2f"|format([invoice.amount_total - (invoice.amount_paid or 0), 0]|max) }} {{ invoice.currency }}
+    </div>
+  </div>
+  <div class="pay-stat">
+    <div class="pay-stat-label">{{ status_label }}</div>
+    <div class="pay-stat-value">{{ invoice.payment_status | upper }}</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     FOOTER — QR Code + Branding
+══════════════════════════════════════════════════ -->
+<div class="footer-row">
+  <div class="qr-block">
+    <img src="data:image/png;base64,{{ qr_base64 }}" alt="QR">
+    <div class="qr-label">Scan to verify</div>
+  </div>
+  <div class="footer-text">
+    <div class="footer-brand">ASG Solutions</div>
+    smart-bots.io &nbsp;|&nbsp; {{ invoice.currency }}<br>
+    {{ generated_label }}: {{ now }}<br>
+    {{ status_label }}: {{ invoice.status | upper }}
+  </div>
+</div>
+
+</body>
+</html>

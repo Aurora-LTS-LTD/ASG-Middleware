@@ -1,0 +1,68 @@
+# =====================================================================
+# Aurora LTS — Cloud Build Pipeline
+# =====================================================================
+# Builds the production container image and pushes it to Artifact Registry.
+#
+# This file is OPTIONAL. The same outcome can be reached with
+#   docker build + docker push    (faster the first time on a Mac)
+#
+# Use Cloud Build when you want a CI artefact:
+#   - reproducible builds in GCP's network (no Mac-specific quirks)
+#   - signed provenance via Cloud Build's metadata
+#   - automatic git-tag → image-tag mapping for release management
+#
+# Trigger:
+#   gcloud builds submit --config cloudbuild.yaml \
+#       --substitutions=_VERSION=v1.0.0
+#
+# Required IAM on the Cloud Build SA:
+#   - roles/artifactregistry.writer  (push image)
+#   - roles/run.developer             (only if this file later deploys too)
+# =====================================================================
+
+substitutions:
+  _REGION:   me-west1
+  _PROJECT:  aurora-lts-prod         # override per-environment
+  _REPO:     aurora                   # Artifact Registry repository name
+  _IMAGE:    api                      # image name within the repo
+  _VERSION:  v0.0.0                   # bump per release; pass via --substitutions
+
+# Run on a small worker — the build is mostly dep installation.
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # ── 1. Build the image (multi-stage Dockerfile in repo root) ──
+  - id: docker-build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
+      - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
+      - --label=git.commit=${COMMIT_SHA}
+      - --label=git.branch=${BRANCH_NAME}
+      - --label=build.id=${BUILD_ID}
+      - .
+
+  # ── 2. Push both tags to Artifact Registry ──
+  - id: docker-push-versioned
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
+
+  - id: docker-push-latest
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
+
+# Cloud Build will record both tags as artifacts.
+images:
+  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
+  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
+
+# Build timeout — generous because the WeasyPrint wheels take time on
+# first build, then cache afterwards.
+timeout: 1200s   # 20 minutes

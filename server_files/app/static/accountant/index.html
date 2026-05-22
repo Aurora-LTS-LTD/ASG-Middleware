@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>פורטל רואה חשבון | AURORA LTS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; }
+    [hidden] { display: none !important; }
+    .pill { @apply inline-block px-2 py-0.5 rounded-full text-xs font-medium; }
+    .pill-green { background:#d1fae5; color:#065f46; }
+    .pill-amber { background:#fef3c7; color:#92400e; }
+    .pill-red   { background:#fee2e2; color:#991b1b; }
+    .pill-slate { background:#e5e7eb; color:#374151; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-900">
+
+<!-- Header -->
+<header class="bg-white border-b border-slate-200">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">A</div>
+      <div>
+        <div class="font-bold leading-tight">פורטל רואה חשבון</div>
+        <div class="text-xs text-slate-500">AURORA LTS · אורורה אל.טי.אס.</div>
+      </div>
+    </div>
+    <div id="current-user" class="text-sm text-slate-600"></div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- Login -->
+  <section id="login-screen" class="bg-white border rounded-2xl p-8 max-w-md mx-auto mt-12">
+    <h2 class="text-xl font-bold mb-4">התחברות רואה חשבון</h2>
+    <input id="login-email" type="email" placeholder="email@cpa-firm.co.il"
+           class="w-full mb-3 px-3 py-2 border rounded-lg" dir="ltr" />
+    <input id="login-password" type="password" placeholder="סיסמה"
+           class="w-full mb-3 px-3 py-2 border rounded-lg" />
+    <p id="login-error" class="hidden text-red-600 text-sm mb-2"></p>
+    <button onclick="doLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-medium">
+      התחבר
+    </button>
+    <p class="text-xs text-slate-400 mt-3 text-center">לא רואה חשבון? היכנס ל
+      <a class="text-indigo-600 hover:underline" href="/dashboard">דשבורד הראשי</a>
+    </p>
+  </section>
+
+  <!-- App (after login) -->
+  <section id="app" hidden>
+
+    <!-- Tabs -->
+    <nav class="flex gap-2 mb-5 text-sm">
+      <button class="tab px-4 py-2 rounded-lg font-medium" data-tab="book">📚 הספר</button>
+      <button class="tab px-4 py-2 rounded-lg font-medium" data-tab="org">🏢 פרטי עסק</button>
+      <button class="tab px-4 py-2 rounded-lg font-medium" data-tab="exports">📤 ייצוא</button>
+      <button class="tab px-4 py-2 rounded-lg font-medium" data-tab="coa">🧾 מיפוי חשבונות</button>
+    </nav>
+
+    <!-- Tab: Book -->
+    <div id="tab-book" class="tab-content">
+      <h2 class="text-lg font-bold mb-3">הלקוחות שלי</h2>
+      <div id="book-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      <p id="book-empty" hidden class="text-center text-slate-400 py-12">
+        לא משויכים לך לקוחות עדיין. בקש הזמנה מהבעלים.
+      </p>
+    </div>
+
+    <!-- Tab: Org drill-in -->
+    <div id="tab-org" class="tab-content" hidden>
+      <div class="flex items-center gap-3 mb-3">
+        <h2 class="text-lg font-bold">סיכום עסק</h2>
+        <select id="org-select" class="px-3 py-1.5 border rounded-lg text-sm"></select>
+        <input id="period-start" type="date" class="px-3 py-1.5 border rounded-lg text-sm" />
+        <input id="period-end" type="date" class="px-3 py-1.5 border rounded-lg text-sm" />
+        <button onclick="loadSummary()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm">טען</button>
+      </div>
+      <div id="org-summary" class="space-y-3"></div>
+    </div>
+
+    <!-- Tab: Exports -->
+    <div id="tab-exports" class="tab-content" hidden>
+      <h2 class="text-lg font-bold mb-3">ייצוא</h2>
+      <div class="bg-white border rounded-2xl p-5 mb-5">
+        <h3 class="font-medium mb-3">צור ייצוא חדש</h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <select id="export-org" class="px-3 py-2 border rounded-lg text-sm"></select>
+          <select id="export-format" class="px-3 py-2 border rounded-lg text-sm">
+            <option value="uniform_file">מבנה אחיד (ITA)</option>
+            <option value="hashavshevet">חשבשבת CSV</option>
+          </select>
+          <input id="export-period-start" type="date" class="px-3 py-2 border rounded-lg text-sm" />
+          <input id="export-period-end" type="date" class="px-3 py-2 border rounded-lg text-sm" />
+        </div>
+        <button onclick="createExport()" class="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm">
+          📤 צור ייצוא
+        </button>
+      </div>
+      <div id="exports-list" class="space-y-2"></div>
+    </div>
+
+    <!-- Tab: COA mappings -->
+    <div id="tab-coa" class="tab-content" hidden>
+      <h2 class="text-lg font-bold mb-3">מיפוי תוכנת הנהלת חשבונות</h2>
+      <p class="text-sm text-slate-500 mb-4">
+        קישור בין הקטגוריות הפנימיות של אורורה לבין מספרי חשבון בתוכנה שלך
+        (חשבשבת / סימפלטקס). הייצוא משתמש במיפוי הזה.
+      </p>
+      <div class="bg-white border rounded-2xl p-5 mb-5">
+        <h3 class="font-medium mb-3">הוסף / עדכן מיפוי</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <select id="coa-category" class="px-3 py-2 border rounded-lg text-sm">
+            <option value="fuel">דלק</option>
+            <option value="tools">כלי עבודה</option>
+            <option value="subcontractor">קבלן משנה</option>
+            <option value="phone">טלפון</option>
+            <option value="rent">שכירות</option>
+            <option value="office_supplies">משרד</option>
+            <option value="depreciation">פחת</option>
+            <option value="bank_charges">עמלות בנק</option>
+            <option value="interest">ריבית</option>
+          </select>
+          <input id="coa-code" type="text" placeholder="מספר חשבון (5510)" class="px-3 py-2 border rounded-lg text-sm" dir="ltr" />
+          <input id="coa-name" type="text" placeholder="שם החשבון (אופציונלי)" class="px-3 py-2 border rounded-lg text-sm" />
+        </div>
+        <button onclick="saveCoaMapping()" class="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm">
+          שמור
+        </button>
+      </div>
+      <div id="coa-list" class="space-y-2"></div>
+    </div>
+
+  </section>
+
+  <!-- Toast -->
+  <div id="toast" hidden class="fixed top-4 left-1/2 -translate-x-1/2 px-4 py-3 rounded-lg shadow-lg z-50"></div>
+
+</main>
+
+<footer class="max-w-6xl mx-auto px-4 py-6 text-center text-xs text-slate-400">
+  © 2026 AURORA LTS LTD — פורטל רואה חשבון
+</footer>
+
+<script>
+const BASE = '';
+let token = localStorage.getItem('aurora_acct_jwt') || null;
+let bookCache = [];
+
+// Auth ────────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const err = document.getElementById('login-error');
+  err.classList.add('hidden');
+
+  try {
+    const r = await fetch('/api/v1/auth/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password}),
+    });
+    if (!r.ok) throw new Error('שם משתמש או סיסמה שגויים');
+    const data = await r.json();
+    token = data.access_token;
+    localStorage.setItem('aurora_acct_jwt', token);
+    showApp(data);
+    loadBook();
+  } catch (e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  }
+}
+
+function showApp(userData) {
+  document.getElementById('login-screen').hidden = true;
+  document.getElementById('app').hidden = false;
+  if (userData) {
+    document.getElementById('current-user').textContent = `${userData.full_name} (${userData.role})`;
+  }
+  switchTab('book');
+}
+
+// Tabs ────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(b => {
+    b.classList.toggle('bg-indigo-100', b.dataset.tab === name);
+    b.classList.toggle('text-indigo-700', b.dataset.tab === name);
+    b.classList.toggle('text-slate-600', b.dataset.tab !== name);
+  });
+  document.querySelectorAll('.tab-content').forEach(d => d.hidden = true);
+  document.getElementById('tab-' + name).hidden = false;
+
+  if (name === 'exports') populateOrgSelectors();
+  if (name === 'coa') loadCoa();
+  if (name === 'org') populateOrgSelectors();
+}
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+
+// API ─────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, ...(opts.headers || {})};
+  const r = await fetch(BASE + path, {...opts, headers});
+  if (r.status === 401) {
+    localStorage.removeItem('aurora_acct_jwt');
+    location.reload();
+    return;
+  }
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).detail; } catch (_) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+// Book ────────────────────────────────────────────────────
+async function loadBook() {
+  try {
+    const data = await api('/api/v1/accountant/book');
+    bookCache = data.items;
+    renderBook(data);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function renderBook(data) {
+  const list = document.getElementById('book-list');
+  document.getElementById('book-empty').hidden = data.items.length > 0;
+  list.innerHTML = '';
+  for (const o of data.items) {
+    const review = o.review_queue_count > 0
+      ? `<span class="pill pill-amber">${o.review_queue_count} בבדיקה</span>` : '';
+    const outstanding = (o.outstanding_amount || 0).toLocaleString('he-IL', {style:'currency',currency:'ILS'});
+    list.innerHTML += `
+      <div class="bg-white border rounded-xl p-4 hover:shadow-sm cursor-pointer"
+           onclick="loadSummaryFor(${o.id})">
+        <div class="flex items-center justify-between mb-1">
+          <div class="font-medium">${o.display_name}</div>
+          <span class="pill pill-slate">${o.legal_structure}</span>
+        </div>
+        <div class="text-xs text-slate-500" dir="ltr">ת.ז./ח.פ. ${o.tax_id}</div>
+        <div class="mt-3 text-sm flex flex-wrap gap-3">
+          <span>📃 ${o.invoice_count} חשבוניות</span>
+          <span>💰 ${outstanding} פתוח</span>
+          ${review}
+        </div>
+      </div>`;
+  }
+}
+
+// Org drill-in ────────────────────────────────────────────
+function populateOrgSelectors() {
+  for (const id of ['org-select', 'export-org']) {
+    const sel = document.getElementById(id);
+    if (!sel) continue;
+    sel.innerHTML = '';
+    for (const o of bookCache) {
+      const opt = document.createElement('option');
+      opt.value = o.id; opt.textContent = o.display_name;
+      sel.appendChild(opt);
+    }
+  }
+  // Default period: current month
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0,10);
+  const end = today.toISOString().slice(0,10);
+  for (const id of ['period-start','export-period-start']) {
+    const el = document.getElementById(id);
+    if (el && !el.value) el.value = start;
+  }
+  for (const id of ['period-end','export-period-end']) {
+    const el = document.getElementById(id);
+    if (el && !el.value) el.value = end;
+  }
+}
+
+async function loadSummaryFor(orgId) {
+  switchTab('org');
+  document.getElementById('org-select').value = orgId;
+  await loadSummary();
+}
+
+async function loadSummary() {
+  const orgId = document.getElementById('org-select').value;
+  const ps = document.getElementById('period-start').value;
+  const pe = document.getElementById('period-end').value;
+  if (!orgId) return;
+  const target = document.getElementById('org-summary');
+  target.innerHTML = '<div class="text-slate-400">טוען...</div>';
+  try {
+    const data = await api(`/api/v1/accountant/orgs/${orgId}/summary?period_start=${ps}&period_end=${pe}`);
+    target.innerHTML = renderSummary(data);
+  } catch (e) {
+    target.innerHTML = `<div class="text-red-600">${e.message}</div>`;
+  }
+}
+
+function fmtMoney(minorUnits) {
+  return ((minorUnits || 0) / 100).toLocaleString('he-IL', {style:'currency',currency:'ILS'});
+}
+function fmtFloat(value) {
+  return (value || 0).toLocaleString('he-IL', {style:'currency',currency:'ILS'});
+}
+
+function renderSummary(d) {
+  const o = d.organization;
+  const rows = (d.expenses.by_category || []).map(c => `
+    <tr><td class="py-1">${c.category}</td>
+        <td class="text-left" dir="ltr">${c.count}</td>
+        <td class="text-left" dir="ltr">${fmtMoney(c.total_amount_minor_units)}</td></tr>
+  `).join('');
+  return `
+    <div class="bg-white border rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <div class="text-xs text-slate-500">הכנסות</div>
+        <div class="text-2xl font-bold">${fmtFloat(d.income.total_amount)}</div>
+        <div class="text-xs text-slate-500">${d.income.invoice_count} חשבוניות</div>
+      </div>
+      <div>
+        <div class="text-xs text-slate-500">הוצאות</div>
+        <div class="text-2xl font-bold">${fmtMoney(d.expenses.total_amount_minor_units)}</div>
+      </div>
+      <div>
+        <div class="text-xs text-slate-500">מע״מ לתשלום</div>
+        <div class="text-2xl font-bold ${d.vat.due_minor_units >= 0 ? 'text-red-600':'text-green-600'}">
+          ${fmtMoney(d.vat.due_minor_units)}
+        </div>
+      </div>
+    </div>
+    <div class="bg-white border rounded-2xl p-5">
+      <div class="font-medium mb-2">הוצאות לפי קטגוריה</div>
+      <table class="w-full text-sm">
+        <thead><tr class="border-b text-slate-500"><th class="py-1 text-right">קטגוריה</th><th class="text-left">#</th><th class="text-left">סכום</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="3" class="text-slate-400 py-3">אין נתונים</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div class="bg-white border rounded-2xl p-5">
+      <div class="text-sm">
+        בתור בדיקה ידנית: <strong>${d.review_queue_count}</strong> קבלות
+      </div>
+    </div>
+  `;
+}
+
+// Exports ─────────────────────────────────────────────────
+async function createExport() {
+  const orgId = document.getElementById('export-org').value;
+  const format = document.getElementById('export-format').value;
+  const ps = document.getElementById('export-period-start').value;
+  const pe = document.getElementById('export-period-end').value;
+  if (!orgId || !ps || !pe) { toast('יש לבחור עסק ותאריכים', 'error'); return; }
+  try {
+    const r = await api(`/api/v1/accountant/orgs/${orgId}/exports`, {
+      method: 'POST',
+      body: JSON.stringify({format, period_start: ps, period_end: pe}),
+    });
+    toast('הייצוא נוצר', 'success');
+    loadExportsList(orgId);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function loadExportsList(orgId) {
+  const list = document.getElementById('exports-list');
+  list.innerHTML = '<div class="text-slate-400">טוען...</div>';
+  try {
+    const data = await api(`/api/v1/accountant/orgs/${orgId}/exports`);
+    if (data.count === 0) { list.innerHTML = '<div class="text-slate-400 text-center py-6">אין ייצואים עדיין</div>'; return; }
+    list.innerHTML = '';
+    for (const e of data.items) {
+      const status = e.status === 'completed'
+        ? '<span class="pill pill-green">הושלם</span>'
+        : e.status === 'failed' ? '<span class="pill pill-red">נכשל</span>'
+        : '<span class="pill pill-amber">בעיבוד</span>';
+      const dl = e.signed_url
+        ? `<a href="${e.signed_url}" target="_blank" class="text-indigo-600 hover:underline">⬇ הורד</a>`
+        : (e.status === 'completed' ? `<button onclick="refreshSignedUrl(${e.id}, this)" class="text-indigo-600 hover:underline">הורד</button>` : '');
+      list.innerHTML += `
+        <div class="bg-white border rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <div class="font-medium">${e.format} · ${e.period_start} → ${e.period_end}</div>
+            <div class="text-xs text-slate-500">${e.record_count || 0} רשומות · ${(e.file_size_bytes || 0).toLocaleString()} bytes · ${status}</div>
+          </div>
+          <div>${dl}</div>
+        </div>`;
+    }
+  } catch (e) { list.innerHTML = `<div class="text-red-600">${e.message}</div>`; }
+}
+
+async function refreshSignedUrl(exportId, btn) {
+  try {
+    const data = await api(`/api/v1/accountant/exports/${exportId}`);
+    if (data.signed_url) window.open(data.signed_url, '_blank');
+    else toast('לא ניתן לחדש קישור', 'error');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// COA ─────────────────────────────────────────────────────
+async function loadCoa() {
+  const list = document.getElementById('coa-list');
+  list.innerHTML = '<div class="text-slate-400">טוען...</div>';
+  try {
+    const data = await api('/api/v1/accountant/coa-mappings');
+    if (data.count === 0) { list.innerHTML = '<div class="text-slate-400 text-center py-6">אין מיפויים עדיין — הוסף את הראשון למעלה.</div>'; return; }
+    list.innerHTML = '';
+    for (const m of data.items) {
+      list.innerHTML += `
+        <div class="bg-white border rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <span class="pill pill-slate">${m.category}</span>
+            <span class="ml-2 font-mono text-sm" dir="ltr">${m.account_code}</span>
+            ${m.account_name ? `<span class="ml-2 text-slate-500 text-sm">${m.account_name}</span>` : ''}
+          </div>
+        </div>`;
+    }
+  } catch (e) { list.innerHTML = `<div class="text-red-600">${e.message}</div>`; }
+}
+
+async function saveCoaMapping() {
+  const category = document.getElementById('coa-category').value;
+  const account_code = document.getElementById('coa-code').value.trim();
+  const account_name = document.getElementById('coa-name').value.trim() || null;
+  if (!account_code) { toast('יש להזין מספר חשבון', 'error'); return; }
+  try {
+    await api('/api/v1/accountant/coa-mappings', {
+      method: 'PUT',
+      body: JSON.stringify({category, account_code, account_name}),
+    });
+    toast('המיפוי נשמר', 'success');
+    document.getElementById('coa-code').value = '';
+    document.getElementById('coa-name').value = '';
+    loadCoa();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// Toast ───────────────────────────────────────────────────
+function toast(msg, kind) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'fixed top-4 left-1/2 -translate-x-1/2 px-4 py-3 rounded-lg shadow-lg z-50 ' +
+    (kind === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white');
+  el.hidden = false;
+  setTimeout(() => el.hidden = true, 3000);
+}
+
+// Init ────────────────────────────────────────────────────
+(async () => {
+  if (token) {
+    try {
+      const me = await api('/api/v1/auth/me');
+      showApp(me);
+      await loadBook();
+    } catch (_) {
+      localStorage.removeItem('aurora_acct_jwt');
+      token = null;
+    }
+  }
+})();
+</script>
+</body>
+</html>

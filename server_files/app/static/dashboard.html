@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora LTS — Invoice Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef1fe',
+                            100: '#d9dffb',
+                            500: '#4f6ef7',
+                            600: '#3b55e6',
+                            700: '#2d42c9',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .toast {
+            animation: slideIn 0.3s ease-out, fadeOut 0.5s ease-in 2.5s;
+            animation-fill-mode: forwards;
+        }
+        @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- LOGIN SCREEN                                                -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="login-screen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-brand-600">Aurora LTS</h1>
+            <p class="text-xs text-slate-400 mt-1">אורורה אל.טי.אס. בע"מ</p>
+            <p class="text-slate-500 mt-2">Smart Business OS for Israeli SMBs</p>
+        </div>
+
+        <!-- Login Form -->
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                <input id="login-email" type="email" placeholder="admin@asg.com"
+                    class="w-full border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                    onkeydown="if(event.key==='Enter') doLogin()">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                <input id="login-password" type="password" placeholder="Enter your password"
+                    class="w-full border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                    onkeydown="if(event.key==='Enter') doLogin()">
+            </div>
+            <p id="login-error" class="text-red-500 text-sm hidden"></p>
+            <button onclick="doLogin()" id="login-btn"
+                class="w-full bg-brand-500 hover:bg-brand-600 text-white py-3 rounded-lg text-sm font-medium transition-colors">
+                Log In
+            </button>
+        </div>
+
+        <p class="text-center text-xs text-slate-400 mt-6">© 2026 AURORA LTS LTD · v3.0.0-aurora</p>
+        <p class="text-center text-xs text-slate-400 mt-1">
+            New here? <a href="/onboarding" class="text-brand-600 hover:underline">Create an account</a>
+        </p>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- LAYOUT: Sidebar + Main Content (hidden until login)        -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="app-layout" class="flex min-h-screen hidden">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 text-white flex flex-col">
+        <!-- Logo -->
+        <div class="p-6 border-b border-slate-700">
+            <h1 class="text-xl font-bold text-brand-500">Aurora LTS</h1>
+            <p class="text-xs text-slate-500 mt-0.5">אורורה אל.טי.אס. בע"מ</p>
+            <p class="text-sm text-slate-400 mt-1">Invoice Dashboard</p>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 p-4 space-y-1">
+            <button onclick="navigate('overview')" id="nav-overview"
+                class="nav-btn w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+                Overview
+            </button>
+            <button onclick="navigate('invoices')" id="nav-invoices"
+                class="nav-btn w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+                Invoices
+            </button>
+            <button onclick="navigate('payments')" id="nav-payments"
+                class="nav-btn w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+                Payments
+            </button>
+            <button onclick="navigate('logs')" id="nav-logs"
+                class="nav-btn w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+                Activity Log
+            </button>
+        </nav>
+
+        <!-- User Info + Logout -->
+        <div class="p-4 border-t border-slate-700">
+            <div class="flex items-center justify-between mb-2">
+                <div>
+                    <p id="user-name" class="text-sm font-medium text-slate-200"></p>
+                    <p id="user-role" class="text-xs text-slate-400"></p>
+                </div>
+                <button onclick="doLogout()" title="Log out"
+                    class="text-slate-400 hover:text-red-400 transition-colors text-sm px-2 py-1 rounded hover:bg-slate-800">
+                    Logout
+                </button>
+            </div>
+            <div class="flex items-center gap-2 mt-2">
+                <span id="status-dot" class="w-2 h-2 rounded-full bg-green-400"></span>
+                <span class="text-sm text-slate-400">System Online</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">v2.0.0 — Alienware Server</p>
+            <!-- Telegram Link -->
+            <div class="mt-3 pt-3 border-t border-slate-700">
+                <button onclick="showTelegramModal()"
+                    class="w-full text-left text-xs text-slate-400 hover:text-brand-400 px-2 py-2 rounded hover:bg-slate-800 transition-colors flex items-center gap-2">
+                    🤖 <span>Link Telegram Bot</span>
+                </button>
+                <button onclick="showWhatsappModal()"
+                    class="w-full text-left text-xs text-slate-400 hover:text-green-400 px-2 py-2 rounded hover:bg-slate-800 transition-colors flex items-center gap-2 mt-1">
+                    💬 <span>Link WhatsApp Bot</span>
+                </button>
+                <button onclick="showAccountantModal()"
+                    class="w-full text-left text-xs text-slate-400 hover:text-indigo-400 px-2 py-2 rounded hover:bg-slate-800 transition-colors flex items-center gap-2 mt-1">
+                    🤝 <span>Invite Accountant</span>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-8">
+
+        <!-- Toast Notification Area -->
+        <div id="toast-area" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- PAGE: Overview                                  -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div id="page-overview" class="page hidden">
+            <h2 class="text-2xl font-bold text-slate-800 mb-6">Overview</h2>
+
+            <!-- Stats Cards - Row 1 -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Total Invoices</p>
+                    <p id="stat-total" class="text-3xl font-bold text-slate-800 mt-2">0</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Pending Allocation</p>
+                    <p id="stat-pending" class="text-3xl font-bold text-yellow-600 mt-2">0</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Finalized</p>
+                    <p id="stat-finalized" class="text-3xl font-bold text-green-600 mt-2">0</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Total Revenue (ILS)</p>
+                    <p id="stat-revenue" class="text-3xl font-bold text-brand-600 mt-2">0</p>
+                </div>
+            </div>
+            <!-- Stats Cards - Row 2: Payment Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Outstanding (ILS)</p>
+                    <p id="stat-outstanding" class="text-3xl font-bold text-orange-600 mt-2">0</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Overdue Invoices</p>
+                    <p id="stat-overdue" class="text-3xl font-bold text-red-600 mt-2">0</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Fully Paid</p>
+                    <p id="stat-paid" class="text-3xl font-bold text-emerald-600 mt-2">0</p>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h3 class="text-lg font-semibold text-slate-700 mb-4">Recent Activity</h3>
+                <div id="overview-logs" class="space-y-3">
+                    <p class="text-slate-400 text-sm">Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- PAGE: Invoices                                  -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div id="page-invoices" class="page hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-slate-800">Invoices</h2>
+                <button onclick="showCreateModal()"
+                    class="bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    + New Invoice
+                </button>
+            </div>
+
+            <!-- Invoices Table -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full">
+                    <thead class="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                            <th class="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Invoice #</th>
+                            <th class="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Business</th>
+                            <th class="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Beneficiary</th>
+                            <th class="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">Net</th>
+                            <th class="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">VAT</th>
+                            <th class="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">Total</th>
+                            <th class="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase">Payment</th>
+                            <th class="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase">Allocation</th>
+                            <th class="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase">Status</th>
+                            <th class="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoices-table-body" class="divide-y divide-slate-100">
+                        <tr><td colspan="10" class="px-4 py-8 text-center text-slate-400">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- PAGE: Payments                                  -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div id="page-payments" class="page hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-slate-800">Payments</h2>
+                <button onclick="triggerReminders()"
+                    class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    Send Overdue Reminders
+                </button>
+            </div>
+
+            <!-- Payment Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Total Outstanding</p>
+                    <p id="pay-outstanding" class="text-2xl font-bold text-orange-600 mt-2">0.00 ILS</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Total Collected</p>
+                    <p id="pay-collected" class="text-2xl font-bold text-emerald-600 mt-2">0.00 ILS</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                    <p class="text-sm text-slate-500">Overdue</p>
+                    <p id="pay-overdue-count" class="text-2xl font-bold text-red-600 mt-2">0</p>
+                </div>
+            </div>
+
+            <!-- Overdue Invoices Table -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-red-50 px-4 py-3 border-b border-red-200">
+                    <h3 class="text-sm font-semibold text-red-700">Overdue Invoices</h3>
+                </div>
+                <table class="w-full">
+                    <thead class="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                            <th class="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Invoice #</th>
+                            <th class="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Beneficiary</th>
+                            <th class="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">Total</th>
+                            <th class="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">Paid</th>
+                            <th class="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">Remaining</th>
+                            <th class="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase">Days Overdue</th>
+                            <th class="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="overdue-table-body" class="divide-y divide-slate-100">
+                        <tr><td colspan="7" class="px-4 py-8 text-center text-slate-400">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- PAGE: Activity Log                              -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div id="page-logs" class="page hidden">
+            <h2 class="text-2xl font-bold text-slate-800 mb-6">Activity Log</h2>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full">
+                    <thead class="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                            <th class="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Time</th>
+                            <th class="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Status</th>
+                            <th class="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Detail</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table-body" class="divide-y divide-slate-100">
+                        <tr><td colspan="3" class="px-4 py-8 text-center text-slate-400">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- MODAL: Create Invoice                                      -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="create-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-40">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8">
+        <h3 class="text-xl font-bold text-slate-800 mb-6">Create New Invoice</h3>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Business</label>
+                <select id="form-business" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                    <option value="">Select a business...</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Beneficiary Name</label>
+                <input id="form-beneficiary" type="text" placeholder="e.g., Ahmad Electronics"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Tax ID (optional)</label>
+                    <input id="form-taxid" type="text" placeholder="e.g., 515123456"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Contact (optional)</label>
+                    <input id="form-contact" type="text" placeholder="Phone or email"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Amount (before VAT) in ILS</label>
+                <input id="form-amount" type="number" step="0.01" placeholder="e.g., 12000"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+                <p id="vat-preview" class="text-xs text-slate-400 mt-1"></p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Description (optional)</label>
+                <input id="form-description" type="text" placeholder="e.g., Monthly service fee"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3 mt-8">
+            <button onclick="hideCreateModal()"
+                class="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
+            <button onclick="submitInvoice()"
+                class="bg-brand-500 hover:bg-brand-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
+                Create Invoice
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- MODAL: Record Payment                                      -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="payment-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-40">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8">
+        <h3 class="text-xl font-bold text-slate-800 mb-2">Record Payment</h3>
+        <p id="payment-modal-subtitle" class="text-sm text-slate-500 mb-6"></p>
+
+        <input type="hidden" id="pay-invoice-id">
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Amount (ILS)</label>
+                <input id="pay-amount" type="number" step="0.01" placeholder="e.g., 5000"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+                <p id="pay-remaining-hint" class="text-xs text-slate-400 mt-1"></p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+                <select id="pay-method" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+                    <option value="cash">Cash</option>
+                    <option value="transfer">Bank Transfer</option>
+                    <option value="credit">Credit Card</option>
+                    <option value="check">Check</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Payment Date</label>
+                    <input id="pay-date" type="date"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Reference (optional)</label>
+                    <input id="pay-reference" type="text" placeholder="Check #, transfer ID"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+                <input id="pay-notes" type="text" placeholder="e.g., Partial payment via bank"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3 mt-8">
+            <button onclick="hidePaymentModal()"
+                class="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
+            <button onclick="submitPayment()"
+                class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
+                Record Payment
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT                                                 -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<script>
+    // ---------------------------------------------------------
+    // AUTH STATE
+    // ---------------------------------------------------------
+    // The JWT token is stored in localStorage so it survives
+    // page refreshes. Every API call includes it as a header.
+    let authToken = localStorage.getItem('asg_token');
+    let currentUserName = localStorage.getItem('asg_user_name') || '';
+    let currentUserRole = localStorage.getItem('asg_user_role') || '';
+
+    // ---------------------------------------------------------
+    // AUTH HELPER: Build headers for every API call
+    // ---------------------------------------------------------
+    // This function returns the headers object that includes
+    // the JWT token. Every fetch() call uses this.
+    function authHeaders(extra = {}) {
+        const headers = { ...extra };
+        if (authToken) {
+            headers['Authorization'] = 'Bearer ' + authToken;
+        }
+        return headers;
+    }
+
+    // ---------------------------------------------------------
+    // LOGIN
+    // ---------------------------------------------------------
+    async function doLogin() {
+        const email = document.getElementById('login-email').value.trim();
+        const password = document.getElementById('login-password').value;
+        const errorEl = document.getElementById('login-error');
+        const btn = document.getElementById('login-btn');
+
+        if (!email || !password) {
+            errorEl.textContent = 'Please enter email and password';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        btn.textContent = 'Logging in...';
+        btn.disabled = true;
+        errorEl.classList.add('hidden');
+
+        try {
+            const res = await fetch('/api/v1/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Login failed');
+            }
+
+            const data = await res.json();
+
+            // Store the token and user info
+            authToken = data.access_token;
+            currentUserName = data.full_name;
+            currentUserRole = data.role;
+            localStorage.setItem('asg_token', authToken);
+            localStorage.setItem('asg_user_name', currentUserName);
+            localStorage.setItem('asg_user_role', currentUserRole);
+
+            // Switch from login screen to dashboard
+            showDashboard();
+
+        } catch (e) {
+            errorEl.textContent = e.message;
+            errorEl.classList.remove('hidden');
+        } finally {
+            btn.textContent = 'Log In';
+            btn.disabled = false;
+        }
+    }
+
+    // ---------------------------------------------------------
+    // LOGOUT
+    // ---------------------------------------------------------
+    function doLogout() {
+        // Clear everything and show login screen
+        authToken = null;
+        currentUserName = '';
+        currentUserRole = '';
+        localStorage.removeItem('asg_token');
+        localStorage.removeItem('asg_user_name');
+        localStorage.removeItem('asg_user_role');
+
+        document.getElementById('app-layout').classList.add('hidden');
+        document.getElementById('login-screen').classList.remove('hidden');
+        document.getElementById('login-password').value = '';
+    }
+
+    // ---------------------------------------------------------
+    // SHOW DASHBOARD (after successful login)
+    // ---------------------------------------------------------
+    function showDashboard() {
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('app-layout').classList.remove('hidden');
+
+        // Show user info in sidebar
+        document.getElementById('user-name').textContent = currentUserName;
+        document.getElementById('user-role').textContent = currentUserRole === 'admin' ? 'Administrator' : 'Business Owner';
+
+        // Load the overview page
+        navigate('overview');
+    }
+
+    // ---------------------------------------------------------
+    // HANDLE 401 RESPONSES (token expired or invalid)
+    // ---------------------------------------------------------
+    // If any API call returns 401, the token is no longer valid.
+    // We automatically log the user out and show the login screen.
+    async function authFetch(url, options = {}) {
+        options.headers = authHeaders(options.headers || {});
+        const res = await fetch(url, options);
+        if (res.status === 401) {
+            showToast('Session expired — please log in again', 'error');
+            doLogout();
+            throw new Error('Unauthorized');
+        }
+        return res;
+    }
+
+    // ---------------------------------------------------------
+    // STATE
+    // ---------------------------------------------------------
+    let invoices = [];
+    let businesses = [];
+    let logs = [];
+    let paymentSummary = {};
+    let overdueInvoices = [];
+    let currentPage = 'overview';
+
+    // ---------------------------------------------------------
+    // NAVIGATION
+    // ---------------------------------------------------------
+    function navigate(page) {
+        currentPage = page;
+        // Hide all pages
+        document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+        // Show selected page
+        document.getElementById('page-' + page).classList.remove('hidden');
+        // Update nav buttons
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.classList.remove('bg-slate-800', 'text-white');
+            btn.classList.add('text-slate-400', 'hover:text-white', 'hover:bg-slate-800');
+        });
+        const activeBtn = document.getElementById('nav-' + page);
+        activeBtn.classList.add('bg-slate-800', 'text-white');
+        activeBtn.classList.remove('text-slate-400');
+        // Refresh data
+        fetchAll();
+    }
+
+    // ---------------------------------------------------------
+    // DATA FETCHING (now uses authFetch with JWT headers)
+    // ---------------------------------------------------------
+    async function fetchAll() {
+        try {
+            await Promise.all([
+                fetchInvoices(), fetchBusinesses(), fetchLogs(),
+                fetchPaymentSummary(), fetchOverdueInvoices(),
+            ]);
+            renderOverview();
+            renderInvoices();
+            renderLogs();
+            renderPayments();
+        } catch (e) {
+            if (e.message === 'Unauthorized') return;
+            console.error('Fetch error:', e);
+        }
+    }
+
+    async function fetchInvoices() {
+        const res = await authFetch('/api/v1/invoices');
+        invoices = await res.json();
+    }
+
+    async function fetchBusinesses() {
+        const res = await authFetch('/api/v1/businesses');
+        businesses = await res.json();
+    }
+
+    async function fetchLogs() {
+        const res = await authFetch('/api/v1/logs');
+        logs = await res.json();
+    }
+
+    async function fetchPaymentSummary() {
+        try {
+            const res = await authFetch('/api/v1/payments/summary');
+            paymentSummary = await res.json();
+        } catch (e) { paymentSummary = {}; }
+    }
+
+    async function fetchOverdueInvoices() {
+        try {
+            const res = await authFetch('/api/v1/payments/overdue');
+            overdueInvoices = await res.json();
+        } catch (e) { overdueInvoices = []; }
+    }
+
+    // ---------------------------------------------------------
+    // RENDER: Overview
+    // ---------------------------------------------------------
+    function renderOverview() {
+        document.getElementById('stat-total').textContent = invoices.length;
+        document.getElementById('stat-pending').textContent =
+            invoices.filter(i => i.allocation_status === 'pending').length;
+        document.getElementById('stat-finalized').textContent =
+            invoices.filter(i => i.status === 'finalized' || i.status === 'sent').length;
+        const revenue = invoices
+            .filter(i => i.status !== 'cancelled')
+            .reduce((sum, i) => sum + (i.amount_total || 0), 0);
+        document.getElementById('stat-revenue').textContent = revenue.toLocaleString('en', {minimumFractionDigits: 2});
+
+        // Payment stats
+        document.getElementById('stat-outstanding').textContent =
+            (paymentSummary.total_outstanding || 0).toLocaleString('en', {minimumFractionDigits: 2});
+        document.getElementById('stat-overdue').textContent = paymentSummary.overdue_count || 0;
+        document.getElementById('stat-paid').textContent =
+            invoices.filter(i => i.payment_status === 'paid').length;
+
+        // Recent logs
+        const container = document.getElementById('overview-logs');
+        if (logs.length === 0) {
+            container.innerHTML = '<p class="text-slate-400 text-sm">No activity yet</p>';
+            return;
+        }
+        container.innerHTML = logs.slice(0, 5).map(log => `
+            <div class="flex items-center gap-3 text-sm">
+                <span class="w-2 h-2 rounded-full ${statusColor(log.status)}"></span>
+                <span class="text-slate-500 w-36 shrink-0">${formatTime(log.triggered_at)}</span>
+                <span class="text-slate-700">${escapeHtml(log.detail)}</span>
+            </div>
+        `).join('');
+    }
+
+    // ---------------------------------------------------------
+    // RENDER: Invoices Table
+    // ---------------------------------------------------------
+    function renderInvoices() {
+        const tbody = document.getElementById('invoices-table-body');
+        if (invoices.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-slate-400">No invoices yet. Click "+ New Invoice" to create one.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = invoices.map(inv => `
+            <tr class="hover:bg-slate-50 transition-colors">
+                <td class="px-4 py-3 text-sm font-medium text-slate-800">${escapeHtml(inv.invoice_number)}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${escapeHtml(inv.business_name || 'N/A')}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${escapeHtml(inv.beneficiary_name)}</td>
+                <td class="px-4 py-3 text-sm text-right text-slate-600">${num(inv.amount_net)}</td>
+                <td class="px-4 py-3 text-sm text-right text-slate-600">${num(inv.vat_amount)}</td>
+                <td class="px-4 py-3 text-sm text-right font-semibold text-slate-800">${num(inv.amount_total)}</td>
+                <td class="px-4 py-3 text-center">${paymentBadge(inv.payment_status)}</td>
+                <td class="px-4 py-3 text-center">${allocBadge(inv.allocation_status, inv.allocation_number)}</td>
+                <td class="px-4 py-3 text-center">${statusBadge(inv.status)}</td>
+                <td class="px-4 py-3 text-center">${actionButtons(inv)}</td>
+            </tr>
+        `).join('');
+    }
+
+    // ---------------------------------------------------------
+    // RENDER: Logs Table
+    // ---------------------------------------------------------
+    function renderLogs() {
+        const tbody = document.getElementById('logs-table-body');
+        if (logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-slate-400">No logs yet</td></tr>';
+            return;
+        }
+        tbody.innerHTML = logs.map(log => `
+            <tr class="hover:bg-slate-50">
+                <td class="px-4 py-3 text-sm text-slate-500">${formatTime(log.triggered_at)}</td>
+                <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 text-sm"><span class="w-2 h-2 rounded-full ${statusColor(log.status)}"></span>${escapeHtml(log.status)}</span></td>
+                <td class="px-4 py-3 text-sm text-slate-600">${escapeHtml(log.detail)}</td>
+            </tr>
+        `).join('');
+    }
+
+    // ---------------------------------------------------------
+    // BADGES & HELPERS
+    // ---------------------------------------------------------
+    function statusBadge(status) {
+        const colors = {
+            draft: 'bg-slate-100 text-slate-600',
+            finalized: 'bg-green-100 text-green-700',
+            sent: 'bg-blue-100 text-blue-700',
+            cancelled: 'bg-red-100 text-red-600',
+        };
+        return `<span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[status] || colors.draft}">${status}</span>`;
+    }
+
+    function allocBadge(status, number) {
+        const colors = {
+            pending: 'bg-yellow-100 text-yellow-700',
+            approved: 'bg-green-100 text-green-700',
+            not_required: 'bg-slate-100 text-slate-500',
+            failed: 'bg-red-100 text-red-600',
+        };
+        const label = status === 'approved' ? number : status.replace('_', ' ');
+        return `<span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[status] || colors.pending}">${label}</span>`;
+    }
+
+    function paymentBadge(status) {
+        const colors = {
+            unpaid: 'bg-slate-100 text-slate-600',
+            partial: 'bg-amber-100 text-amber-700',
+            paid: 'bg-emerald-100 text-emerald-700',
+        };
+        return `<span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[status] || colors.unpaid}">${status || 'unpaid'}</span>`;
+    }
+
+    function actionButtons(inv) {
+        let btns = '';
+        if (inv.status === 'draft') {
+            btns += `<button onclick="finalizeInvoice(${inv.id})" class="text-xs bg-green-500 hover:bg-green-600 text-white px-2.5 py-1 rounded transition-colors">Finalize</button> `;
+        }
+        if (inv.status === 'finalized') {
+            btns += `<button onclick="sendWhatsApp(${inv.id})" class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1 rounded transition-colors mr-1">Send WA</button>`;
+        }
+        if (inv.status === 'sent') {
+            btns += `<span class="text-xs text-slate-400 mr-1">Delivered</span>`;
+        }
+        // Show "Pay" button for finalized/sent invoices that are not fully paid
+        if ((inv.status === 'finalized' || inv.status === 'sent') && inv.payment_status !== 'paid') {
+            btns += `<button onclick="showPaymentModal(${inv.id})" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1 rounded transition-colors mr-1">Pay</button>`;
+        }
+        // Show PDF download button for finalized/sent invoices
+        if (inv.status === 'finalized' || inv.status === 'sent') {
+            btns += `<a href="/api/v1/pdf/${inv.id}/download?lang=ar" class="text-xs bg-slate-500 hover:bg-slate-600 text-white px-2.5 py-1 rounded transition-colors inline-block" target="_blank">PDF</a>`;
+        }
+        return btns || '<span class="text-xs text-slate-400">-</span>';
+    }
+
+    function statusColor(status) {
+        const map = { received: 'bg-blue-400', created: 'bg-slate-400', finalized: 'bg-green-400', sent: 'bg-blue-400', error: 'bg-red-400', payment_received: 'bg-emerald-400', reminder_sent: 'bg-orange-400' };
+        return map[status] || 'bg-slate-300';
+    }
+
+    function num(n) { return (n || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function formatTime(t) { return t ? new Date(t).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''; }
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ---------------------------------------------------------
+    // ACTIONS (now use authFetch)
+    // ---------------------------------------------------------
+    async function finalizeInvoice(id) {
+        showToast('Finalizing invoice...', 'info');
+        try {
+            const res = await authFetch(`/api/v1/invoices/${id}/finalize`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Failed');
+            }
+            showToast('Invoice finalized!', 'success');
+            await fetchAll();
+        } catch (e) {
+            if (e.message !== 'Unauthorized') showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    async function sendWhatsApp(id) {
+        const phone = prompt('Enter recipient WhatsApp number (e.g., +972501234567):');
+        if (!phone) return;
+        showToast('Sending via WhatsApp...', 'info');
+        try {
+            const res = await authFetch(`/api/v1/invoices/${id}/send-whatsapp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipient_phone: phone }),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Failed');
+            }
+            showToast('Invoice sent via WhatsApp!', 'success');
+            await fetchAll();
+        } catch (e) {
+            if (e.message !== 'Unauthorized') showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    // ---------------------------------------------------------
+    // RENDER: Payments Page
+    // ---------------------------------------------------------
+    function renderPayments() {
+        // Summary cards
+        document.getElementById('pay-outstanding').textContent =
+            num(paymentSummary.total_outstanding || 0) + ' ILS';
+        document.getElementById('pay-collected').textContent =
+            num(paymentSummary.total_paid || 0) + ' ILS';
+        document.getElementById('pay-overdue-count').textContent =
+            paymentSummary.overdue_count || 0;
+
+        // Overdue table
+        const tbody = document.getElementById('overdue-table-body');
+        if (overdueInvoices.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-emerald-600 font-medium">No overdue invoices! All payments are on track.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = overdueInvoices.map(inv => `
+            <tr class="hover:bg-red-50 transition-colors">
+                <td class="px-4 py-3 text-sm font-medium text-slate-800">${escapeHtml(inv.invoice_number)}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${escapeHtml(inv.beneficiary_name)}</td>
+                <td class="px-4 py-3 text-sm text-right text-slate-600">${num(inv.amount_total)}</td>
+                <td class="px-4 py-3 text-sm text-right text-slate-600">${num(inv.amount_paid)}</td>
+                <td class="px-4 py-3 text-sm text-right font-semibold text-red-700">${num(inv.remaining)}</td>
+                <td class="px-4 py-3 text-center"><span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">${inv.days_overdue}d</span></td>
+                <td class="px-4 py-3 text-center">
+                    <button onclick="showPaymentModal(${inv.id})" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1 rounded transition-colors">Pay</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // ---------------------------------------------------------
+    // RECORD PAYMENT MODAL
+    // ---------------------------------------------------------
+    function showPaymentModal(invoiceId) {
+        const inv = invoices.find(i => i.id === invoiceId);
+        if (!inv) return;
+
+        document.getElementById('pay-invoice-id').value = invoiceId;
+        const remaining = inv.amount_total - (inv.amount_paid || 0);
+        document.getElementById('payment-modal-subtitle').textContent =
+            `Invoice ${inv.invoice_number} — ${inv.beneficiary_name}`;
+        document.getElementById('pay-remaining-hint').textContent =
+            `Remaining: ${num(remaining)} ILS`;
+        document.getElementById('pay-amount').value = '';
+        document.getElementById('pay-amount').max = remaining;
+        document.getElementById('pay-method').selectedIndex = 0;
+        document.getElementById('pay-date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('pay-reference').value = '';
+        document.getElementById('pay-notes').value = '';
+        document.getElementById('payment-modal').classList.remove('hidden');
+    }
+
+    function hidePaymentModal() {
+        document.getElementById('payment-modal').classList.add('hidden');
+    }
+
+    async function submitPayment() {
+        const invoiceId = parseInt(document.getElementById('pay-invoice-id').value);
+        const amount = parseFloat(document.getElementById('pay-amount').value);
+        const method = document.getElementById('pay-method').value;
+        const payDate = document.getElementById('pay-date').value;
+
+        if (!amount || amount <= 0) {
+            showToast('Please enter a valid payment amount', 'error');
+            return;
+        }
+        if (!payDate) {
+            showToast('Please select a payment date', 'error');
+            return;
+        }
+
+        const payload = {
+            invoice_id: invoiceId,
+            amount: amount,
+            method: method,
+            payment_date: payDate,
+            reference: document.getElementById('pay-reference').value || null,
+            notes: document.getElementById('pay-notes').value || null,
+        };
+
+        try {
+            const res = await authFetch('/api/v1/payments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Failed');
+            }
+            const result = await res.json();
+            showToast(`Payment recorded! Status: ${result.payment_status}`, 'success');
+            hidePaymentModal();
+            await fetchAll();
+        } catch (e) {
+            if (e.message !== 'Unauthorized') showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    // ---------------------------------------------------------
+    // SEND OVERDUE REMINDERS (admin only)
+    // ---------------------------------------------------------
+    async function triggerReminders() {
+        if (!confirm('Send WhatsApp reminders to all overdue invoices?')) return;
+        showToast('Sending reminders...', 'info');
+        try {
+            const res = await authFetch('/api/v1/payments/send-reminders', { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Failed');
+            }
+            const result = await res.json();
+            showToast(`Reminders sent: ${result.reminders_sent}, Skipped: ${result.skipped_no_contact + result.skipped_recent_reminder}`, 'success');
+            await fetchAll();
+        } catch (e) {
+            if (e.message !== 'Unauthorized') showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    // ---------------------------------------------------------
+    // CREATE INVOICE MODAL
+    // ---------------------------------------------------------
+    function showCreateModal() {
+        const sel = document.getElementById('form-business');
+        sel.innerHTML = '<option value="">Select a business...</option>' +
+            businesses.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+        document.getElementById('create-modal').classList.remove('hidden');
+    }
+
+    function hideCreateModal() {
+        document.getElementById('create-modal').classList.add('hidden');
+        ['form-business', 'form-beneficiary', 'form-taxid', 'form-contact', 'form-amount', 'form-description'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el.tagName === 'SELECT') el.selectedIndex = 0;
+            else el.value = '';
+        });
+        document.getElementById('vat-preview').textContent = '';
+    }
+
+    async function submitInvoice() {
+        const business_id = document.getElementById('form-business').value;
+        const beneficiary_name = document.getElementById('form-beneficiary').value;
+        const amount_net = parseFloat(document.getElementById('form-amount').value);
+
+        if (!business_id || !beneficiary_name || !amount_net) {
+            showToast('Please fill in Business, Beneficiary, and Amount', 'error');
+            return;
+        }
+
+        const payload = {
+            business_id: parseInt(business_id),
+            beneficiary_name,
+            beneficiary_tax_id: document.getElementById('form-taxid').value || null,
+            beneficiary_contact: document.getElementById('form-contact').value || null,
+            amount_net,
+            description: document.getElementById('form-description').value || null,
+        };
+
+        try {
+            const res = await authFetch('/api/v1/invoices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Failed');
+            }
+            showToast('Invoice created!', 'success');
+            hideCreateModal();
+            await fetchAll();
+        } catch (e) {
+            if (e.message !== 'Unauthorized') showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    // Live VAT preview
+    document.getElementById('form-amount').addEventListener('input', function() {
+        const net = parseFloat(this.value) || 0;
+        const vat = (net * 0.18).toFixed(2);
+        const total = (net * 1.18).toFixed(2);
+        document.getElementById('vat-preview').textContent =
+            net > 0 ? `VAT (18%): ${vat} ILS | Total: ${total} ILS` : '';
+    });
+
+    // ---------------------------------------------------------
+    // TOAST NOTIFICATIONS
+    // ---------------------------------------------------------
+    function showToast(message, type = 'info') {
+        const colors = {
+            success: 'bg-green-500',
+            error: 'bg-red-500',
+            info: 'bg-brand-500',
+        };
+        const area = document.getElementById('toast-area');
+        const toast = document.createElement('div');
+        toast.className = `toast ${colors[type]} text-white px-4 py-2 rounded-lg shadow-lg text-sm`;
+        toast.textContent = message;
+        area.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // ---------------------------------------------------------
+    // INIT: Check if already logged in
+    // ---------------------------------------------------------
+    // On page load, check if there's a stored token.
+    // If yes, skip login screen and go straight to dashboard.
+    // If no, show the login screen.
+    if (authToken) {
+        // Verify the token is still valid by calling /auth/me
+        fetch('/api/v1/auth/me', { headers: { 'Authorization': 'Bearer ' + authToken } })
+            .then(res => {
+                if (res.ok) {
+                    return res.json();
+                } else {
+                    // Token expired or invalid — show login
+                    doLogout();
+                    throw new Error('Token invalid');
+                }
+            })
+            .then(user => {
+                currentUserName = user.full_name;
+                currentUserRole = user.role;
+                localStorage.setItem('asg_user_name', currentUserName);
+                localStorage.setItem('asg_user_role', currentUserRole);
+                showDashboard();
+            })
+            .catch(() => {});  // doLogout already handles the UI
+    }
+    // else: login screen is already visible by default
+
+    // Auto-refresh every 30 seconds (only when logged in)
+    setInterval(() => {
+        if (authToken) fetchAll();
+    }, 30000);
+
+    // ──────────────────────────────────────────────────────────
+    // TELEGRAM LINK MODAL
+    // ──────────────────────────────────────────────────────────
+    function showTelegramModal() {
+        document.getElementById('telegram-modal').classList.remove('hidden');
+        document.getElementById('telegram-code-area').classList.add('hidden');
+        document.getElementById('telegram-code-display').textContent = '------';
+        document.getElementById('telegram-cmd-display').textContent = '/start LINK-......';
+    }
+
+    function closeTelegramModal() {
+        document.getElementById('telegram-modal').classList.add('hidden');
+    }
+
+    async function generatePairingCode() {
+        const btn = document.getElementById('gen-code-btn');
+        btn.disabled = true;
+        btn.textContent = 'Generating...';
+        try {
+            const res = await authFetch('/api/v1/telegram/pairing-code', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('telegram-code-display').textContent = data.code;
+                document.getElementById('telegram-cmd-display').textContent = data.instruction;
+                document.getElementById('telegram-code-area').classList.remove('hidden');
+                // Auto-expire message after 10 minutes
+                setTimeout(() => {
+                    document.getElementById('telegram-code-display').textContent = 'פג תוקף';
+                    document.getElementById('telegram-cmd-display').textContent = 'Code expired — generate a new one';
+                }, data.expires_in_seconds * 1000);
+            } else {
+                showToast('Error: ' + (data.detail || 'Could not generate code'), 'error');
+            }
+        } catch (e) {
+            showToast('Network error', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Generate New Code';
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // WHATSAPP LINK MODAL
+    // ──────────────────────────────────────────────────────────
+    // Same shape as the Telegram modal but:
+    //   - calls /api/v1/whatsapp/pairing-code
+    //   - surfaces a tap-to-WhatsApp wa.me link (mobile friendly)
+    //   - tells the user to send "LINK-XXXXXX" to the bot number
+    function showWhatsappModal() {
+        document.getElementById('whatsapp-modal').classList.remove('hidden');
+        document.getElementById('whatsapp-code-area').classList.add('hidden');
+        document.getElementById('whatsapp-code-display').textContent = '------';
+        document.getElementById('whatsapp-cmd-display').textContent = 'LINK-......';
+        const link = document.getElementById('whatsapp-wame-link');
+        if (link) { link.href = '#'; link.classList.add('pointer-events-none', 'opacity-50'); }
+    }
+
+    function closeWhatsappModal() {
+        document.getElementById('whatsapp-modal').classList.add('hidden');
+    }
+
+    async function generateWhatsappPairingCode() {
+        const btn = document.getElementById('gen-wa-code-btn');
+        btn.disabled = true;
+        btn.textContent = 'Generating...';
+        try {
+            const res = await authFetch('/api/v1/whatsapp/pairing-code', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('whatsapp-code-display').textContent = data.code;
+                document.getElementById('whatsapp-cmd-display').textContent = data.instruction;
+                document.getElementById('whatsapp-code-area').classList.remove('hidden');
+                const link = document.getElementById('whatsapp-wame-link');
+                if (data.wa_me_url) {
+                    link.href = data.wa_me_url;
+                    link.classList.remove('pointer-events-none', 'opacity-50');
+                } else {
+                    link.href = '#';
+                    link.classList.add('pointer-events-none', 'opacity-50');
+                }
+                // Auto-expire message after 10 minutes
+                setTimeout(() => {
+                    document.getElementById('whatsapp-code-display').textContent = 'פג תוקף';
+                    document.getElementById('whatsapp-cmd-display').textContent = 'Code expired — generate a new one';
+                }, data.expires_in_seconds * 1000);
+            } else {
+                showToast('Error: ' + (data.detail || 'Could not generate code'), 'error');
+            }
+        } catch (e) {
+            showToast('Network error', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Generate New Code';
+        }
+    }
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TELEGRAM LINK MODAL                                         -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="telegram-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative">
+        <!-- Close button -->
+        <button onclick="closeTelegramModal()"
+            class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <div class="text-5xl mb-3">🤖</div>
+            <h3 class="text-xl font-bold text-slate-800">Link Your Telegram Bot</h3>
+            <p class="text-sm text-slate-500 mt-1">Connect your Telegram account to the ASG bot</p>
+        </div>
+
+        <!-- Steps -->
+        <ol class="text-sm text-slate-600 space-y-2 mb-6">
+            <li class="flex gap-2"><span class="font-bold text-brand-500">1.</span> Click <b>Generate Code</b> below</li>
+            <li class="flex gap-2"><span class="font-bold text-brand-500">2.</span> Open the ASG bot in Telegram</li>
+            <li class="flex gap-2"><span class="font-bold text-brand-500">3.</span> Send the command shown</li>
+        </ol>
+
+        <!-- Code Display (hidden until generated) -->
+        <div id="telegram-code-area" class="hidden bg-slate-50 rounded-xl p-5 text-center mb-5 border border-slate-200">
+            <p class="text-xs text-slate-500 mb-1">Your pairing code:</p>
+            <p id="telegram-code-display" class="text-4xl font-mono font-bold text-brand-600 tracking-[0.3em]">------</p>
+            <p class="text-xs text-slate-500 mt-3 mb-1">Send this to the bot:</p>
+            <code id="telegram-cmd-display"
+                class="block bg-slate-800 text-green-400 text-sm px-4 py-2 rounded-lg font-mono">
+                /start LINK-......
+            </code>
+            <p class="text-xs text-amber-500 mt-2">⏱ Valid for 10 minutes</p>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex gap-3">
+            <button id="gen-code-btn" onclick="generatePairingCode()"
+                class="flex-1 bg-brand-500 hover:bg-brand-600 text-white py-3 rounded-xl text-sm font-medium transition-colors">
+                Generate Code
+            </button>
+            <button onclick="closeTelegramModal()"
+                class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl text-sm font-medium transition-colors">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- WHATSAPP LINK MODAL                                         -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="whatsapp-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative">
+        <!-- Close button -->
+        <button onclick="closeWhatsappModal()"
+            class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <div class="text-5xl mb-3">💬</div>
+            <h3 class="text-xl font-bold text-slate-800">Link Your WhatsApp</h3>
+            <p class="text-sm text-slate-500 mt-1">Connect your WhatsApp number to the ASG bot</p>
+        </div>
+
+        <!-- Steps -->
+        <ol class="text-sm text-slate-600 space-y-2 mb-6">
+            <li class="flex gap-2"><span class="font-bold text-green-500">1.</span> Click <b>Generate Code</b> below</li>
+            <li class="flex gap-2"><span class="font-bold text-green-500">2.</span> Tap <b>Open in WhatsApp</b> (or message the bot yourself)</li>
+            <li class="flex gap-2"><span class="font-bold text-green-500">3.</span> Send the <b>LINK-XXXXXX</b> message shown</li>
+        </ol>
+
+        <!-- Code Display (hidden until generated) -->
+        <div id="whatsapp-code-area" class="hidden bg-slate-50 rounded-xl p-5 text-center mb-5 border border-slate-200">
+            <p class="text-xs text-slate-500 mb-1">Your pairing code:</p>
+            <p id="whatsapp-code-display" class="text-4xl font-mono font-bold text-green-600 tracking-[0.3em]">------</p>
+            <p class="text-xs text-slate-500 mt-3 mb-1">Send this to the bot:</p>
+            <code id="whatsapp-cmd-display"
+                class="block bg-slate-800 text-green-400 text-sm px-4 py-2 rounded-lg font-mono">
+                LINK-......
+            </code>
+            <a id="whatsapp-wame-link" href="#" target="_blank"
+                class="inline-block mt-3 bg-green-500 hover:bg-green-600 text-white text-sm font-medium px-4 py-2 rounded-lg pointer-events-none opacity-50 transition-colors">
+                📱 Open in WhatsApp
+            </a>
+            <p class="text-xs text-amber-500 mt-2">⏱ Valid for 10 minutes</p>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex gap-3">
+            <button id="gen-wa-code-btn" onclick="generateWhatsappPairingCode()"
+                class="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl text-sm font-medium transition-colors">
+                Generate Code
+            </button>
+            <button onclick="closeWhatsappModal()"
+                class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl text-sm font-medium transition-colors">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- INVITE ACCOUNTANT MODAL  (Sprint 1 follow-up)               -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="accountant-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative">
+        <!-- Close button -->
+        <button onclick="closeAccountantModal()"
+            class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <div class="text-5xl mb-3">🤝</div>
+            <h3 class="text-xl font-bold text-slate-800">Invite Your Accountant</h3>
+            <p class="text-sm text-slate-500 mt-1">
+                They'll see your reports — they can't edit your data.
+                <span class="text-indigo-600 font-medium">20% lifetime rev-share.</span>
+            </p>
+        </div>
+
+        <!-- Form (hidden once code generated) -->
+        <div id="accountant-form-area">
+            <label class="block text-sm font-medium text-slate-700 mb-1">
+                Accountant's email or phone (E.164)
+            </label>
+            <input id="accountant-target" type="text" placeholder="cpa@example.com or +97250XXXXXXX"
+                class="w-full border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-3">
+
+            <label class="block text-sm font-medium text-slate-700 mb-1">
+                Display name (optional)
+            </label>
+            <input id="accountant-name-hint" type="text" placeholder="Roni's CPA Firm"
+                class="w-full border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-3">
+
+            <p id="accountant-error" class="text-red-500 text-sm hidden mb-2"></p>
+            <p id="accountant-org-hint" class="text-xs text-slate-400 mb-2"></p>
+        </div>
+
+        <!-- Code Display (shown post-generation) -->
+        <div id="accountant-code-area" class="hidden bg-indigo-50 rounded-xl p-5 mb-5 border border-indigo-200">
+            <p class="text-xs text-indigo-700 mb-1">✓ Invitation created. Share this link:</p>
+            <code id="accountant-link-display"
+                class="block bg-slate-800 text-indigo-300 text-xs px-4 py-3 rounded-lg font-mono break-all">
+                ...
+            </code>
+            <p class="text-xs text-slate-500 mt-3">
+                Or just send the code <span class="font-mono font-bold" id="accountant-code-display">...</span>
+                to <span id="accountant-target-echo" class="font-medium">...</span>.
+            </p>
+            <p class="text-xs text-amber-600 mt-2">⏱ Valid for 72 hours.</p>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex gap-3">
+            <button id="gen-accountant-btn" onclick="generateAccountantInvite()"
+                class="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white py-3 rounded-xl text-sm font-medium transition-colors">
+                Send Invitation
+            </button>
+            <button onclick="closeAccountantModal()"
+                class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl text-sm font-medium transition-colors">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// INVITE ACCOUNTANT  (Sprint 1 follow-up)
+// ═══════════════════════════════════════════════════════════════
+let _cachedPrimaryOrgId = null;
+
+async function _resolvePrimaryOrgId() {
+    if (_cachedPrimaryOrgId) return _cachedPrimaryOrgId;
+    const token = localStorage.getItem('asg_jwt') || localStorage.getItem('aurora_jwt');
+    if (!token) throw new Error('Not logged in');
+    const res = await fetch('/api/v1/me/context', {
+        headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!res.ok) throw new Error('Failed to resolve organization context');
+    const data = await res.json();
+    const orgId = data.context && data.context.primary_org_id;
+    if (!orgId) {
+        throw new Error("You don't have an organization yet. Complete onboarding first.");
+    }
+    _cachedPrimaryOrgId = orgId;
+    return orgId;
+}
+
+async function showAccountantModal() {
+    document.getElementById('accountant-modal').classList.remove('hidden');
+    document.getElementById('accountant-form-area').classList.remove('hidden');
+    document.getElementById('accountant-code-area').classList.add('hidden');
+    document.getElementById('accountant-error').classList.add('hidden');
+    document.getElementById('accountant-target').value = '';
+    document.getElementById('accountant-name-hint').value = '';
+    const hint = document.getElementById('accountant-org-hint');
+    hint.textContent = 'Resolving your organization...';
+    try {
+        const orgId = await _resolvePrimaryOrgId();
+        hint.textContent = `Inviting to organization #${orgId}.`;
+    } catch (e) {
+        hint.textContent = '⚠️ ' + e.message;
+    }
+}
+
+function closeAccountantModal() {
+    document.getElementById('accountant-modal').classList.add('hidden');
+}
+
+async function generateAccountantInvite() {
+    const target = document.getElementById('accountant-target').value.trim();
+    const nameHint = document.getElementById('accountant-name-hint').value.trim();
+    const errEl = document.getElementById('accountant-error');
+    errEl.classList.add('hidden');
+
+    // Quick client-side validation: email or +<digits>
+    const isEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(target);
+    const isPhone = /^\+\d{8,15}$/.test(target);
+    if (!isEmail && !isPhone) {
+        errEl.textContent = 'Enter a valid email (a@b.c) or international phone (+972...)';
+        errEl.classList.remove('hidden');
+        return;
+    }
+
+    const btn = document.getElementById('gen-accountant-btn');
+    btn.disabled = true;
+    btn.textContent = 'Working...';
+
+    try {
+        const orgId = await _resolvePrimaryOrgId();
+        const token = localStorage.getItem('asg_jwt') || localStorage.getItem('aurora_jwt');
+        const body = {
+            role: 'accountant',
+            target_email: isEmail ? target : null,
+            target_phone_e164: isPhone ? target : null,
+            display_name_hint: nameHint || null,
+        };
+        const res = await fetch(`/api/v1/organizations/${orgId}/invitations`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token,
+            },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.detail || ('HTTP ' + res.status));
+        }
+        const data = await res.json();
+        const acceptUrl = `${window.location.origin}/onboarding?invitation=${data.code}`;
+        document.getElementById('accountant-link-display').textContent = acceptUrl;
+        document.getElementById('accountant-code-display').textContent = data.code.substring(0, 8) + '...';
+        document.getElementById('accountant-target-echo').textContent = target;
+        document.getElementById('accountant-form-area').classList.add('hidden');
+        document.getElementById('accountant-code-area').classList.remove('hidden');
+    } catch (e) {
+        errEl.textContent = e.message;
+        errEl.classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Invitation';
+    }
+}
+</script>
+
+</body>
+</html>

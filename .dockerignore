@@ -1,0 +1,93 @@
+# =====================================================================
+# Aurora LTS — Docker Build Context Exclusions
+# =====================================================================
+# Keep the build context tiny + ensure no secrets / dev artifacts ever
+# end up in a layer that could be exfiltrated from a registry.
+
+# ── Python build artifacts ──
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/*.pyc
+**/*.pyo
+
+# ── Virtual environments ── (Linux containers must NOT inherit Mac venvs)
+venv/
+.venv/
+env/
+**/venv/
+**/.venv/
+
+# ── Local development databases ──
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── Local PDFs / KYC stub uploads (regenerated at runtime) ──
+server_files/app/static/pdfs/*.pdf
+server_files/app/static/kyc_uploads/
+
+# ── Git + IDE clutter ──
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# ── Secrets — NEVER ship these inside the image ──
+.env
+.env.*
+!.env.production.example
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+
+# ── Logs + temp ──
+*.log
+logs/
+tmp/
+.tmp/
+
+# ── CI / test artifacts ──
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+.tox/
+junit.xml
+test-results/
+
+# ── Documentation that doesn't need to ship inside the runtime image ──
+README.md
+docs/
+*.md
+!server_files/**/*.md   # service-level READMEs near the code stay
+
+# ── Node / web build artifacts (not used today, but defensive) ──
+node_modules/
+dist/
+build/
+
+# ── Misc ──
+.dockerignore
+Dockerfile.*
+docker-compose*.yml
+.github/
+.editorconfig
+
+# ── Founder's Mac-specific files ──
+.AppleDouble
+.LSOverride
+Icon
+._*

@@ -1,0 +1,57 @@
+# Aurora LTS — Cloud Build context exclusions
+# (mirrors .dockerignore so the upload to gs://*_cloudbuild stays small)
+
+# Python build artifacts
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/*.pyc
+
+# Virtual environments — these are HUGE and Mac-specific
+venv/
+.venv/
+env/
+**/venv/
+**/.venv/
+
+# Local databases + uploads
+*.db
+*.db-journal
+*.sqlite*
+ags_dashboard.db
+**/asg_platform.db
+server_files/app/static/pdfs/*.pdf
+server_files/app/static/kyc_uploads/
+server_files/app/static/receipts/
+
+# Git, IDE, OS
+.git/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+**/.DS_Store
+
+# Secrets (defensive — should never ship)
+.env
+.env.*
+!.env.production.example
+*.pem
+*.key
+
+# Logs + temp
+*.log
+logs/
+tmp/
+.tmp/
+
+# CI / test artifacts
+htmlcov/
+.coverage*
+
+# Docs (build doesn't need them)
+docs/
+*.md
+!server_files/**/*.md
