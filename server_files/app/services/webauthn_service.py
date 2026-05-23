@@ -62,7 +62,7 @@ log = logging.getLogger(__name__)
 
 def _rp_id() -> str:
     """Relying Party ID — MUST be the registrable domain of admin URL."""
-    return os.getenv("AURORA_WEBAUTHN_RP_ID", "admin.aurora-ltd.co.il")
+    return os.getenv("AURORA_WEBAUTHN_RP_ID", "console.api-aurora-lts.com")
 
 
 def _rp_name() -> str:
@@ -70,7 +70,7 @@ def _rp_name() -> str:
 
 
 def _origin() -> str:
-    return os.getenv("AURORA_WEBAUTHN_ORIGIN", "https://admin.aurora-ltd.co.il")
+    return os.getenv("AURORA_WEBAUTHN_ORIGIN", "https://console.api-aurora-lts.com")
 
 
 def _step_up_secret() -> bytes:

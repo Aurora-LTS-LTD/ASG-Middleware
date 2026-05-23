@@ -14,8 +14,8 @@
 # Environment variables (with sensible defaults):
 #   PROJECT          aurora-lts-prod
 #   REGION           me-west1
-#   API_HOST         api-aurora.com
-#   ADMIN_HOST       admin.aurora-ltd.co.il
+#   API_HOST         api-aurora-lts.com          (Appendix M — was api-aurora.com)
+#   ADMIN_HOST       console.api-aurora-lts.com  (Appendix M — was admin.aurora-ltd.co.il)
 #   LB_IP            34.117.188.234
 #   MARKETING_HOST   aurora-ltd.co.il
 # =====================================================================
@@ -25,8 +25,8 @@ export LC_ALL=C
 
 PROJECT="${PROJECT:-aurora-lts-prod}"
 REGION="${REGION:-me-west1}"
-API_HOST="${API_HOST:-api-aurora.com}"
-ADMIN_HOST="${ADMIN_HOST:-admin.aurora-ltd.co.il}"
+API_HOST="${API_HOST:-api-aurora-lts.com}"
+ADMIN_HOST="${ADMIN_HOST:-console.api-aurora-lts.com}"
 MARKETING_HOST="${MARKETING_HOST:-aurora-ltd.co.il}"
 LB_IP="${LB_IP:-34.117.188.234}"
 
@@ -89,7 +89,7 @@ check "Forwarding rule aurora-http-fr @:80 (HTTPS redirect)" "$FWD_80" "^${LB_IP
 
 URL_MAP_HOSTS=$(gcloud compute url-maps describe aurora-urlmap --project="$PROJECT" \
   --format='value(hostRules[].hosts.flatten())' 2>/dev/null)
-check "URL map host rules include both api + admin" "$URL_MAP_HOSTS" "api-aurora.com.*admin.aurora-ltd.co.il|admin.aurora-ltd.co.il.*api-aurora.com"
+check "URL map host rules include both api + admin (new domain)" "$URL_MAP_HOSTS" "api-aurora-lts\.com.*console\.api-aurora-lts\.com|console\.api-aurora-lts\.com.*api-aurora-lts\.com"
 
 # =====================================================================
 section "Cloud Run posture"

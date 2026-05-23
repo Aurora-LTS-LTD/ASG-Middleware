@@ -69,7 +69,7 @@ router = APIRouter(prefix="/api/v1/internal", tags=["internal"])
 #   2. NEW: `Authorization: Bearer <google-oidc-token>` where the OIDC
 #      token was minted by Cloud Scheduler via
 #      `--oidc-service-account-email=aurora-run@aurora-lts-prod.iam.gserviceaccount.com`
-#      and `--oidc-token-audience=https://api-aurora.com`.
+#      and `--oidc-token-audience=https://api-aurora-lts.com`.
 #
 # Either path is sufficient. The OIDC path is preferred (no shared
 # secret); the legacy path stays during the migration window. Once
@@ -96,7 +96,7 @@ def _verify_internal_token(
                 # to the legacy token path instead of failing closed
                 print(f"[INTERNAL] OIDC verification module unavailable: {e}")
             else:
-                audience = (os.getenv("AURORA_OIDC_AUDIENCE") or "https://api-aurora.com").strip()
+                audience = (os.getenv("AURORA_OIDC_AUDIENCE") or "https://api-aurora-lts.com").strip()
                 try:
                     claims = verify_google_oidc_token(token, audience)
                 except OidcVerificationError as e:

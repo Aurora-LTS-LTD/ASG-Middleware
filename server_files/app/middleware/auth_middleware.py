@@ -113,7 +113,9 @@ def _try_resolve_oidc_admin(token: str, db: Session) -> User | None:
     HS256 Aurora-JWT path).
 
     Env vars:
-      AURORA_OIDC_AUDIENCE        Expected `aud` claim (e.g., "https://api-aurora.com")
+      AURORA_OIDC_AUDIENCE        Expected `aud` claim (e.g., "https://api-aurora-lts.com").
+                                  Accepts a comma-separated list for migration bake windows
+                                  (e.g., "https://api-aurora-lts.com,https://api-aurora.com").
       AURORA_OIDC_SA_ALLOWLIST    Comma-separated SA emails that may impersonate admin
     """
     # Peek the alg without verifying signature. Only attempt OIDC if

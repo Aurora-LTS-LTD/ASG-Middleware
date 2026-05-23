@@ -1563,12 +1563,12 @@ def webauthn_preflight(
     import os as _os
     from app.database.models import WebauthnCredential
 
-    rp_id = (_os.getenv("AURORA_WEBAUTHN_RP_ID") or "admin.aurora-ltd.co.il").strip()
+    rp_id = (_os.getenv("AURORA_WEBAUTHN_RP_ID") or "console.api-aurora-lts.com").strip()
     # Multi-origin support (Appendix K §1B Layer 2)
     raw = (
         _os.getenv("AURORA_WEBAUTHN_ALLOWED_ORIGINS")
         or _os.getenv("AURORA_WEBAUTHN_ORIGIN")
-        or "https://admin.aurora-ltd.co.il"
+        or "https://console.api-aurora-lts.com"
     )
     allowed_origins = [o.strip() for o in raw.split(",") if o.strip()]
 

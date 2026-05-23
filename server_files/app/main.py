@@ -113,10 +113,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://aurora-ltd.co.il",       # marketing apex
-        "https://www.aurora-ltd.co.il",   # marketing www subdomain
-        "https://app.aurora-ltd.co.il",   # forward-compat: future authenticated SPA
-        "https://admin.aurora-ltd.co.il", # IAP-gated admin (Track 4 Glass Fintech dashboard)
+        "https://aurora-ltd.co.il",            # marketing apex
+        "https://www.aurora-ltd.co.il",        # marketing www subdomain
+        "https://app.aurora-ltd.co.il",        # forward-compat: future authenticated SPA
+        "https://console.api-aurora-lts.com",  # Executive Cockpit (Appendix M — primary)
+        "https://admin.aurora-ltd.co.il",      # legacy admin URL — REMOVE in Appendix M P10 cutover
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -320,6 +321,17 @@ async def startup():
         run_phase18_migrations()
     except Exception as e:
         print(f"[STARTUP] Phase 18 migration warning: {e}")
+
+    # ── Run Phase 19 DB migrations (Appendix M Sprint 6 — Domain cutover) ──
+    # Revokes all pre-cutover WebAuthn credentials (bound to old RP_ID
+    # admin.aurora-ltd.co.il) so the audit trail reflects retirement rather
+    # than silent breakage. Controlled by AURORA_PHASE19_REVOKE_ON_BOOT
+    # (default 1); set to 0 for rollback scenarios.
+    try:
+        from app.migrate_phase19 import run_phase19_migrations
+        run_phase19_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 19 migration warning: {e}")
 
     # ── Start WhatsApp outbound-resend worker (always on) ──
     # Safe to run even if Meta creds aren't set — the worker no-ops
