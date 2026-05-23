@@ -72,4 +72,7 @@ from app.database.models import (
     CausalInsight,
     FederatedSyncLog,
     GrowthMilestone,
+    # Sprint 8.2 — Aurora Mac Shell hardware binding (Phase 20)
+    NativeDeviceKey,
+    NativeHandshakeChallenge,
 )

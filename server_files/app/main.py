@@ -46,6 +46,7 @@ from app.routers.marketing import router as marketing_router                 # S
 from app.routers.admin_break_glass import router as admin_break_glass_router # Track 3 — Break-glass JWT lifecycle (IAP-only)
 from app.routers.admin_users import router as admin_users_router             # Track 4 — Admin users + orgs list (feeds aurora-admin-ui)
 from app.routers.admin_exec import router as admin_exec_router               # Appendix H — Tier 1 CEO Executive Dashboard backend
+from app.routers.native_shell import router as native_shell_router           # Sprint 8.2 — Aurora Mac Shell hardware binding (Phase 20)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ app.include_router(marketing_router)         # Sprint 7 — POST /api/v1/marketi
 app.include_router(admin_break_glass_router) # Track 3 — list + revoke break-glass tokens (IAP-strict)
 app.include_router(admin_users_router)       # Track 4 — admin users + orgs list (consumed by aurora-admin-ui)
 app.include_router(admin_exec_router)        # Appendix H — Tier 1 CEO Executive Dashboard endpoints
+app.include_router(native_shell_router)      # Sprint 8.2 — Aurora Mac Shell handshake + device list/revoke
 
 
 # ─────────────────────────────────────────────────────────────
@@ -332,6 +334,18 @@ async def startup():
         run_phase19_migrations()
     except Exception as e:
         print(f"[STARTUP] Phase 19 migration warning: {e}")
+
+    # ── Run Phase 20 DB migrations (Sprint 8.2 — Aurora Mac Shell) ──
+    # Probes native_device_keys + native_handshake_challenges tables
+    # (created by SQLAlchemy create_tables() above), sweeps stale
+    # challenges older than 24h, and confirms JWT_SIGNING_KEY is set
+    # for native session token issuance. Controlled by
+    # AURORA_PHASE20_ENABLED (default 1).
+    try:
+        from app.migrate_phase20 import run_phase20_migrations
+        run_phase20_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 20 migration warning: {e}")
 
     # ── Start WhatsApp outbound-resend worker (always on) ──
     # Safe to run even if Meta creds aren't set — the worker no-ops

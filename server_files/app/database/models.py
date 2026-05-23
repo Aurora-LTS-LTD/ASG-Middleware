@@ -31,6 +31,8 @@ from sqlalchemy import (
     Boolean,        # True/False values
     UniqueConstraint, # Composite uniqueness (e.g., one membership per user+org)
     Index,          # Named index for faster lookups
+    LargeBinary,    # Raw bytes (challenge_bytes for native shell handshake — Sprint 8.2)
+    text as sa_text,  # Raw SQL fragment — used for partial-index WHERE clauses
 )
 from sqlalchemy.orm import relationship  # Defines connections between tables
 
@@ -2656,3 +2658,152 @@ class GrowthMilestone(Base):
     # Bumped on every refresh of current_value.
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL: NativeDeviceKey   (Sprint 8.2 — Aurora Mac Shell)
+# ═══════════════════════════════════════════════════════════════
+# Each row represents a MacBook (or future iPad) whose Secure
+# Enclave–generated ECDSA P-256 public key has been registered with
+# Aurora via the handshake protocol in app/routers/native_shell.py.
+#
+# The PRIVATE key never leaves the founder's Secure Enclave silicon —
+# we only ever see the public key (X.963 / PEM-encoded) and a SHA-256
+# fingerprint of it ("device_id"). To prove possession, the device
+# must sign a server-issued challenge with its private key; that
+# signature is verified against the stored public key here.
+#
+# Multi-row semantics:
+#   • Same device_id may have many revoked rows + at most one active.
+#   • A "Reset Binding" in the shell creates a fresh SE key → new
+#     device_id → new row. The old row stays for audit trail.
+#   • Revocation is a soft delete (revoked_at + revoked_reason) so
+#     the audit chain is preserved.
+# ═══════════════════════════════════════════════════════════════
+class NativeDeviceKey(Base):
+    __tablename__ = "native_device_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+    # The founder (or future operator) who owns this binding.
+
+    device_id = Column(String(64), nullable=False, index=True)
+    # SHA-256 hex of the X.963-encoded public key. Stable across
+    # launches on the same MacBook. Treated as an opaque
+    # device-fingerprint everywhere downstream.
+
+    public_key_pem = Column(String, nullable=False)
+    # SubjectPublicKeyInfo PEM — human-readable form for audit /
+    # debugging. Used by `cryptography.hazmat` for verification.
+
+    public_key_b64 = Column(String, nullable=False)
+    # X.963 uncompressed point (65 bytes), base64. This is what the
+    # shell's `SecKeyCopyExternalRepresentation` produces; we keep
+    # it so cross-verification with the shell is byte-exact.
+
+    device_label = Column(String(120), nullable=True)
+    # Human-friendly: "MacBook Pro 16'' (Ibraheem)". User-supplied.
+
+    aaguid = Column(String(64), nullable=True)
+    # Reserved for future device-attestation (e.g., Apple's
+    # PlatformProvisioner credentials). NULL in v1.
+
+    enrolled_at = Column(
+        DateTime, default=datetime.datetime.utcnow, nullable=False
+    )
+    last_used_at = Column(DateTime, nullable=True)
+    # Touched on every successful _resolve_native_session() call.
+
+    use_count = Column(Integer, nullable=False, default=0)
+    # Audit signal — how many requests this device has authorized.
+
+    revoked_at = Column(DateTime, nullable=True)
+    revoked_reason = Column(String, nullable=True)
+    # Soft-delete. Once set, the device cannot satisfy
+    # require_native_shell(...) — middleware filters revoked_at IS NULL
+    # on every request.
+
+    __table_args__ = (
+        # At most one ACTIVE row per device_id (partial unique index).
+        # Revoked rows pile up freely — that's the audit chain.
+        Index(
+            "ix_native_device_keys_active_unique",
+            "device_id",
+            unique=True,
+            postgresql_where=sa_text("revoked_at IS NULL"),
+        ),
+        # Fast "list active devices for user X" query path.
+        Index(
+            "ix_native_device_keys_user_active",
+            "user_id",
+            "enrolled_at",
+            postgresql_where=sa_text("revoked_at IS NULL"),
+        ),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL: NativeHandshakeChallenge   (Sprint 8.2 — Aurora Mac Shell)
+# ═══════════════════════════════════════════════════════════════
+# Ephemeral storage for the single-shot challenges issued by
+# /api/v1/admin/exec/native/handshake/start and consumed by
+# /handshake/finish.
+#
+# Lifecycle:
+#   1. Created by /start with `expires_at = now + 60s`
+#   2. Consumed by /finish (sets `consumed_at`, sig verified)
+#   3. Phase 20 migration sweeps rows older than 24h on each boot
+#      (keeps audit visibility for ~1 day, then GC)
+#
+# Cross-user attack guard: the row's user_id is set from the
+# authenticated admin's user_id at /start. /finish requires the
+# challenge_id be looked up WITH a user_id filter, so user A can
+# never consume user B's challenge even if they steal challenge_id.
+# ═══════════════════════════════════════════════════════════════
+class NativeHandshakeChallenge(Base):
+    __tablename__ = "native_handshake_challenges"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    challenge_id = Column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    # UUID4 — the public token the client returns at /finish.
+
+    user_id = Column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+    # Bound to the authenticated user at /start — prevents cross-user
+    # replay even if challenge_id leaks.
+
+    device_id_hint = Column(String(64), nullable=True)
+    # What the client CLAIMED at /start. Untrusted until /finish
+    # proves possession via commitment + signature. We re-check at
+    # /finish that the client didn't switch device_id mid-handshake.
+
+    challenge_bytes = Column(LargeBinary, nullable=False)
+    # 32 cryptographically random bytes the client must sign with
+    # its SE private key. Raw bytes — base64 encode/decode at the
+    # router boundary only.
+
+    issued_at = Column(
+        DateTime, default=datetime.datetime.utcnow, nullable=False
+    )
+    expires_at = Column(DateTime, nullable=False)
+    # 60-second TTL by default (see CHALLENGE_TTL_SECONDS in router).
+
+    consumed_at = Column(DateTime, nullable=True)
+    # Single-shot. Once set, a replay attempt at /finish raises
+    # `challenge_already_consumed`.
+
+    __table_args__ = (
+        Index(
+            "ix_native_handshake_challenges_active_lookup",
+            "challenge_id",
+            "expires_at",
+            postgresql_where=sa_text("consumed_at IS NULL"),
+        ),
+    )

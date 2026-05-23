@@ -251,6 +251,34 @@ GROWTH_ACTIVATE_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
 check "Anonymous /growth/activate/{feature} returns 401" "$GROWTH_ACTIVATE_CODE" "^401$"
 
 # =====================================================================
+section "Aurora Mac Shell — Hardware Binding (Sprint 8.2)"
+# =====================================================================
+
+# Handshake start — POST, require_admin
+NATIVE_HANDSHAKE_START_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"device_id":"0000000000000000000000000000000000000000000000000000000000000000"}' \
+  "https://${API_HOST}/api/v1/admin/exec/native/handshake/start" --max-time 10)
+check "Anonymous /native/handshake/start returns 401" "$NATIVE_HANDSHAKE_START_CODE" "^401$"
+
+# Handshake finish — POST, require_admin
+NATIVE_HANDSHAKE_FINISH_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+  -H "Content-Type: application/json" -d '{}' \
+  "https://${API_HOST}/api/v1/admin/exec/native/handshake/finish" --max-time 10)
+check "Anonymous /native/handshake/finish returns 401" "$NATIVE_HANDSHAKE_FINISH_CODE" "^401$"
+
+# Devices list — GET, require_admin
+NATIVE_DEVICES_LIST_CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
+  "https://${API_HOST}/api/v1/admin/exec/native/devices" --max-time 10)
+check "Anonymous /native/devices returns 401" "$NATIVE_DEVICES_LIST_CODE" "^401$"
+
+# Device revoke — POST, require_admin + require_step_up
+NATIVE_DEVICE_REVOKE_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+  -H "Content-Type: application/json" -d '{}' \
+  "https://${API_HOST}/api/v1/admin/exec/native/devices/1/revoke" --max-time 10)
+check "Anonymous /native/devices/{id}/revoke returns 401" "$NATIVE_DEVICE_REVOKE_CODE" "^401$"
+
+# =====================================================================
 # Summary
 # =====================================================================
 printf "\n${YEL}─────────────────────────────────────────${OFF}\n"

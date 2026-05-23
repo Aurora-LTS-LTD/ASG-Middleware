@@ -665,3 +665,187 @@ def require_org_access(min_role: str = "employee"):
         return current_user
 
     return _dep
+
+
+# ═══════════════════════════════════════════════════════════════
+# Aurora Mac Shell — Hardware-binding session resolution (Sprint 8.2)
+# ═══════════════════════════════════════════════════════════════
+#
+# `_resolve_native_session` decodes the `X-Aurora-Native-Session` JWT
+# (issued by app/routers/native_shell.py after a successful handshake)
+# and verifies the bearer device is still active in `native_device_keys`.
+#
+# It DOES NOT gate access on its own — it just decorates
+# `request.state` with metadata. Pair it with `require_native_shell()`
+# below for endpoints that should be reachable ONLY from a
+# handshake-verified Mac shell.
+#
+# Performance: one DB SELECT + one UPDATE per native-session request.
+# We deliberately do the device lookup on every call (not just at
+# JWT-issue time) so that a REVOKE takes effect within seconds —
+# revoked devices stop being trusted at the next request even though
+# their JWT is still chronologically valid.
+# ═══════════════════════════════════════════════════════════════
+
+# Distinct issuer string — matches what native_shell.py /handshake/finish
+# stamps on the JWT. Keep these two constants in sync.
+_NATIVE_SESSION_ISSUER = "aurora-native-session"
+
+
+def _resolve_native_session(request: Request, db: Session) -> "dict | None":
+    """
+    Decode the X-Aurora-Native-Session header (if present) and confirm
+    the bearer device is currently active (`revoked_at IS NULL`).
+
+    Side effects on success:
+      • request.state.native_device_id  = "<64-char hex>"
+      • request.state.native_session_verified = True
+      • DB row: `last_used_at` touched, `use_count` incremented
+
+    Side effects on absence / failure:
+      • request.state.native_session_verified = False
+      • No exception raised (this is decorator-style, not a gate)
+
+    Returns the verified claims dict, or None if no/invalid session.
+    """
+    header = (request.headers.get("X-Aurora-Native-Session") or "").strip()
+    if not header:
+        request.state.native_session_verified = False
+        return None
+
+    signing_key = (os.getenv("JWT_SIGNING_KEY") or "").strip()
+    if not signing_key:
+        # Config error — log loud but don't raise. The require_native_shell
+        # gate will catch the absence of `native_session_verified=True`.
+        log.error("[_resolve_native_session] JWT_SIGNING_KEY not configured")
+        request.state.native_session_verified = False
+        return None
+
+    try:
+        from jose import jwt as jose_jwt
+        claims = jose_jwt.decode(
+            header,
+            signing_key,
+            algorithms=["HS256"],
+            # `iss` is verified manually below — jose's `issuer=` kwarg
+            # raises JWTError on mismatch instead of returning None,
+            # which is messier to log.
+            options={"verify_aud": False},
+        )
+    except Exception as e:
+        log.warning(
+            "[_resolve_native_session] JWT decode failed: %s: %s",
+            type(e).__name__, str(e)[:200],
+        )
+        request.state.native_session_verified = False
+        return None
+
+    if claims.get("iss") != _NATIVE_SESSION_ISSUER:
+        log.warning(
+            "[_resolve_native_session] wrong iss claim: %r (expected %r)",
+            claims.get("iss"), _NATIVE_SESSION_ISSUER,
+        )
+        request.state.native_session_verified = False
+        return None
+
+    device_id = claims.get("device_id")
+    user_id = claims.get("sub")
+    if not device_id or not user_id:
+        log.warning("[_resolve_native_session] JWT missing device_id or sub")
+        request.state.native_session_verified = False
+        return None
+
+    # Confirm the device is still active. We re-check this on EVERY
+    # request so revocations take effect immediately (rather than
+    # waiting for the JWT to expire).
+    from app.database.models import NativeDeviceKey
+    row = (
+        db.query(NativeDeviceKey)
+        .filter(NativeDeviceKey.device_id == device_id)
+        .filter(NativeDeviceKey.user_id == user_id)
+        .filter(NativeDeviceKey.revoked_at.is_(None))
+        .first()
+    )
+    if not row:
+        log.warning(
+            "[_resolve_native_session] device_id=%s… (user=%s) not active "
+            "(revoked or deleted) — rejecting session",
+            str(device_id)[:16], user_id,
+        )
+        request.state.native_session_verified = False
+        return None
+
+    # Touch metadata. Wrap in try/except so a DB hiccup never breaks
+    # the request — the session claim itself was valid.
+    try:
+        row.last_used_at = datetime.datetime.utcnow()
+        row.use_count = (row.use_count or 0) + 1
+        db.commit()
+    except Exception as e:
+        log.warning(
+            "[_resolve_native_session] failed to touch device metadata: %s", e
+        )
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+    request.state.native_device_id = device_id
+    request.state.native_session_verified = True
+    return claims
+
+
+def require_native_shell(action: str):
+    """
+    Dep factory: returns a FastAPI dependency that 403s any request
+    that hasn't completed a fresh Aurora Mac Shell handshake.
+
+    Layer on top of `require_admin` (which gates IAP + OIDC + role)
+    for endpoints that should be reachable ONLY from a hardware-bound
+    MacBook:
+
+        @router.post("/some-sensitive-action")
+        def endpoint(
+            current_user: User = Depends(require_admin),
+            _native: dict = Depends(require_native_shell("payout_paid")),
+            db: Session = Depends(get_db),
+        ):
+            ...
+
+    The `action` label is for log + error-message clarity. It does NOT
+    affect what's accepted — every native session token can satisfy
+    any require_native_shell dep. (If we ever want action-bound native
+    sessions like WebAuthn step-up tokens, that's a Sprint 8.3 add.)
+
+    Returns the verified claims dict (with `device_id`, `sub`, etc.)
+    so the endpoint body can audit which device authorized the action.
+    """
+    def _dep(
+        request: Request,
+        db: Session = Depends(get_db),
+    ) -> dict:
+        claims = _resolve_native_session(request, db)
+        if not claims:
+            log.warning(
+                "[require_native_shell] action=%s rejected — no valid native session",
+                action,
+            )
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "native_shell_required",
+                    "message": (
+                        f"Action {action!r} requires a hardware-bound "
+                        f"Aurora Mac Shell session. Install the shell from "
+                        f"https://aurora-ltd.co.il/mac-shell/ and complete "
+                        f"device enrollment before retrying."
+                    ),
+                    "action": action,
+                },
+            )
+        return {
+            "device_id": request.state.native_device_id,
+            "action": action,
+            "claims": claims,
+        }
+    return _dep
