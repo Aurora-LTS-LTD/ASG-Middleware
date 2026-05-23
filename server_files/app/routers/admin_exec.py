@@ -1031,29 +1031,77 @@ async def copilot_chat(
          Write tool_uses (propose_provisioning_blueprint etc.) are NOT
          executed — they surface as Pending Approval cards in the UI.
     """
-    # Guardrails (Appendix K §1C — DB-backed rate limit + daily budget cap)
+    # Guardrails (Appendix K §1C — DB-backed rate limit + daily budget cap).
+    # Structured error contract (so Playwright + UI can render rich states):
+    #   429 → {error:"copilot_rate_limited", retry_after_seconds, resets_at,
+    #          current_turns, limit}
+    #   402 → {error:"daily_budget_exceeded", retry_after_seconds, resets_at,
+    #          spent_usd, limit_usd}
+    # Both responses also set the standard Retry-After header in seconds.
     try:
         from app.services.copilot.guardrails import (
             check_chat_guardrails,
             RateLimited,
             BudgetExceeded,
+            _next_utc_midnight_iso,
         )
         usage_state = check_chat_guardrails(current_user.id, db)
     except RateLimited as e:
+        # 429 — per-hour turn cap. resets_at is the next hour boundary in UTC.
+        now = datetime.datetime.utcnow()
+        next_hour = (
+            now + datetime.timedelta(seconds=e.retry_after_s)
+        ).replace(microsecond=0)
         raise HTTPException(
             status_code=429,
-            detail=f"Copilot rate limit ({e.limit}/hr). Retry in {e.retry_after_s}s.",
-            headers={"Retry-After": str(e.retry_after_s)},
+            detail={
+                "error": "copilot_rate_limited",
+                "message": (
+                    f"Copilot rate limit ({e.limit} turns/hour). "
+                    f"Retry in {e.retry_after_s}s."
+                ),
+                "retry_after_seconds": int(e.retry_after_s),
+                "resets_at": next_hour.isoformat() + "Z",
+                "current_turns": int(e.turns),
+                "limit": int(e.limit),
+            },
+            headers={"Retry-After": str(int(e.retry_after_s))},
         )
     except BudgetExceeded as e:
+        # 402 — daily $-cap. resets_at is next UTC midnight (already on `e`).
+        # retry_after_seconds derived from now → midnight for client UX.
+        try:
+            resets_dt = datetime.datetime.fromisoformat(
+                e.resets_at_iso.replace("Z", "+00:00")
+            )
+            retry_after = max(
+                1,
+                int(
+                    (
+                        resets_dt
+                        - datetime.datetime.utcnow().replace(
+                            tzinfo=resets_dt.tzinfo
+                        )
+                    ).total_seconds()
+                ),
+            )
+        except Exception:
+            retry_after = 3600  # safe fallback: 1h
         raise HTTPException(
             status_code=402,
             detail={
                 "error": "daily_budget_exceeded",
-                "spent_usd": e.spent_usd,
-                "limit_usd": e.limit_usd,
+                "message": (
+                    f"Daily Copilot budget exceeded "
+                    f"(${e.spent_usd:.2f} of ${e.limit_usd:.2f}). "
+                    f"Resets at {e.resets_at_iso}."
+                ),
+                "retry_after_seconds": retry_after,
                 "resets_at": e.resets_at_iso,
+                "spent_usd": float(e.spent_usd),
+                "limit_usd": float(e.limit_usd),
             },
+            headers={"Retry-After": str(retry_after)},
         )
 
     conv = (
