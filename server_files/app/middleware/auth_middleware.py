@@ -528,6 +528,24 @@ def require_admin_iap_strict(
             detail="Break-glass tokens cannot access this endpoint; sign in via IAP",
         )
 
+    # Step 1.5 — OIDC service-to-service bypass (Appendix M fix).
+    # Same rationale as `require_admin`: an RS256 bearer means the caller
+    # is a Google-allowlisted SA (verified by Google's signature in
+    # `_try_resolve_oidc_admin`). The SA call is Cloud Run → Cloud Run
+    # and never traverses the IAP gate, so we must not require the
+    # X-Goog-Iap-Jwt-Assertion header. Break-glass tokens use HS256 so
+    # this RS256 check naturally rejects them — the strict semantic
+    # (no break-glass on this endpoint) is preserved.
+    auth_header = request.headers.get("Authorization") or ""
+    if auth_header.lower().startswith("bearer "):
+        try:
+            from jose import jwt as _jose_jwt
+            _hdr = _jose_jwt.get_unverified_header(auth_header.split(" ", 1)[1].strip())
+            if (_hdr or {}).get("alg") == "RS256":
+                return current_user
+        except Exception:
+            pass
+
     # Run the same IAP enforcement as require_admin (Step 3 above),
     # extracted to avoid duplicating the block here.
     if os.getenv("AURORA_ADMIN_REQUIRE_IAP", "0") == "1":
