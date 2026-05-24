@@ -2807,3 +2807,155 @@ class NativeHandshakeChallenge(Base):
             postgresql_where=sa_text("consumed_at IS NULL"),
         ),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL: AccountantDevice   (Sprint 8.2 sibling — Accountant Portal)
+# ═══════════════════════════════════════════════════════════════
+# Multi-active device-fingerprint registry for external accountants
+# using the Tauri + Next.js portal at ~/Desktop/.../accountant-portal.
+#
+# DIFFERENT from NativeDeviceKey (Mac shell, CEO-only):
+#   • Multi-active per user (up to 5 devices simultaneously)
+#   • Advisory only — no cryptographic possession proof. The
+#     fingerprint is just a stable identifier (SHA-256 of
+#     machine UID), used as audit signal + "new device detected"
+#     alert trigger, NOT as a hard authentication factor.
+#   • Cross-platform (macos / windows / linux), not Apple-only.
+#   • The accountant access token + refresh token (separate table)
+#     are the actual auth gates; the device row is metadata.
+# ═══════════════════════════════════════════════════════════════
+class AccountantDevice(Base):
+    __tablename__ = "accountant_devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    device_fingerprint = Column(String(128), nullable=False)
+    # SHA-256 hex (64 chars) of (machine UID + bundle id). Stable
+    # on the same physical machine; different across machines. NOT
+    # cryptographically possession-provable (no SE key behind it).
+
+    platform = Column(String(20), nullable=False)
+    # "macos" | "windows" | "linux"
+
+    device_label = Column(String(120), nullable=True)
+    # User-supplied: "MacBook Pro (Office)", "Lenovo ThinkPad", etc.
+
+    ip_hash_first = Column(String(64), nullable=False)
+    # SHA-256 of (IP + random per-user salt). First-seen IP at enrollment.
+    last_seen_at = Column(DateTime, nullable=False)
+    last_seen_ip_hash = Column(String(64), nullable=False)
+    use_count = Column(Integer, nullable=False, default=0)
+
+    enrolled_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    revoked_reason = Column(String, nullable=True)
+
+    new_device_alert_sent_at = Column(DateTime, nullable=True)
+    # When the "new sign-in detected" email was sent for this device.
+
+    __table_args__ = (
+        # At most one ACTIVE row per (user_id, device_fingerprint).
+        Index(
+            "ix_accountant_devices_user_active",
+            "user_id", "device_fingerprint",
+            unique=True,
+            postgresql_where=sa_text("revoked_at IS NULL"),
+        ),
+        Index(
+            "ix_accountant_devices_user_recent",
+            "user_id", "last_seen_at",
+            postgresql_where=sa_text("revoked_at IS NULL"),
+        ),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL: AccountantRefreshToken   (Sprint 8.2 sibling)
+# ═══════════════════════════════════════════════════════════════
+# Long-lived (30d) refresh tokens for the accountant portal.
+# Stored as SHA-256 hash — never plaintext. Rotation tracking via
+# (used_at, replaced_by_id) chain so we can detect replay attacks.
+#
+# Rotation semantics:
+#   • Each successful /refresh consumes the current token
+#     (sets used_at + replaced_by_id) and issues a new one
+#   • Reuse of a consumed token is a security event: revoke the
+#     whole chain + alert
+# ═══════════════════════════════════════════════════════════════
+class AccountantRefreshToken(Base):
+    __tablename__ = "accountant_refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    device_id = Column(
+        Integer, ForeignKey("accountant_devices.id"), nullable=False, index=True
+    )
+
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    # SHA-256 hex of the opaque token. Plaintext NEVER persisted.
+
+    issued_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    used_at = Column(DateTime, nullable=True)
+    # Set on rotation. Once non-null, token is dead; reuse = security event.
+
+    replaced_by_id = Column(
+        Integer, ForeignKey("accountant_refresh_tokens.id"), nullable=True
+    )
+    # Chain: previous → next rotation. Lets us trace the lineage.
+
+    revoked_at = Column(DateTime, nullable=True)
+    revoked_reason = Column(String, nullable=True)
+    # Explicit revocation (e.g., admin revoke, device revoke,
+    # detected replay attack).
+
+    last_used_ip_hash = Column(String(64), nullable=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL: AccountantOtpAttempt   (Sprint 8.2 sibling)
+# ═══════════════════════════════════════════════════════════════
+# Email-OTP rows for accountant sign-in. Separate from the
+# existing OtpVerification (which is for SMB-owner onboarding)
+# to keep the auth flows independent — they have different TTLs,
+# different attempt limits, different lockout semantics.
+#
+# Lifecycle:
+#   1. /otp/send creates a row with 60s TTL, attempts_count=0
+#   2. /otp/verify increments attempts_count on each wrong guess
+#   3. After 3 wrong attempts → locked_until = now + 15min
+#   4. Success → consumed_at = now (one-shot)
+#   5. Phase 21 sweeps rows older than 1h
+# ═══════════════════════════════════════════════════════════════
+class AccountantOtpAttempt(Base):
+    __tablename__ = "accountant_otp_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(120), nullable=False, index=True)
+
+    otp_hash = Column(String(64), nullable=False)
+    # SHA-256 of the 6-digit code. We never store the plaintext OTP.
+
+    issued_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    attempts_count = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    consumed_at = Column(DateTime, nullable=True)
+
+    ip_hash = Column(String(64), nullable=False)
+    # SHA-256 of caller IP. Used by rate-limiting + audit.
+
+    delivery_method = Column(String(20), nullable=False, default="email")
+    # "email" | "whatsapp"
+
+    __table_args__ = (
+        Index(
+            "ix_accountant_otp_attempts_email_recent",
+            "email", "issued_at",
+            postgresql_where=sa_text("consumed_at IS NULL"),
+        ),
+    )

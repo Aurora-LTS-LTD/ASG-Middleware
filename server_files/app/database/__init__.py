@@ -75,4 +75,8 @@ from app.database.models import (
     # Sprint 8.2 — Aurora Mac Shell hardware binding (Phase 20)
     NativeDeviceKey,
     NativeHandshakeChallenge,
+    # Sprint 8.2 sibling — Accountant Portal auth (Phase 21)
+    AccountantDevice,
+    AccountantRefreshToken,
+    AccountantOtpAttempt,
 )
