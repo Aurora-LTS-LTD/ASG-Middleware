@@ -41,8 +41,10 @@ import os
 import secrets
 from typing import Optional
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, Field, EmailStr, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from jose import jwt as jose_jwt
@@ -83,9 +85,28 @@ JWT_ISSUER = "aurora-accountant"
 # ─────────────────────────────────────────────────────────────
 # Pydantic DTOs (match accountant-portal/src/types/api.ts verbatim)
 # ─────────────────────────────────────────────────────────────
+# Note: we use a plain str + regex validator instead of pydantic's
+# EmailStr to avoid the `email-validator` package dependency. RFC 5322
+# is famously complex; this regex catches the >99% common shapes and
+# rejects obvious malformations. Real email validation happens at the
+# delivery step (SendGrid bounces invalid addresses, OTP never sent).
+_EMAIL_REGEX = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,63}$")
+
+
+def _validate_email_shape(value: str) -> str:
+    v = (value or "").strip().lower()
+    if not v or len(v) > 254 or not _EMAIL_REGEX.match(v):
+        raise ValueError("invalid email format")
+    return v
+
 
 class OtpSendRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(..., min_length=3, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def _email_shape(cls, v: str) -> str:
+        return _validate_email_shape(v)
 
 
 class OtpSendResponse(BaseModel):
@@ -96,11 +117,16 @@ class OtpSendResponse(BaseModel):
 
 
 class OtpVerifyRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(..., min_length=3, max_length=254)
     otp: str = Field(..., min_length=6, max_length=6)
     device_fingerprint: str = Field(..., min_length=64, max_length=64)
     platform: str = Field(..., pattern=r"^(macos|windows|linux)$")
     device_label: str = Field(..., min_length=1, max_length=120)
+
+    @field_validator("email")
+    @classmethod
+    def _email_shape(cls, v: str) -> str:
+        return _validate_email_shape(v)
 
     @field_validator("device_fingerprint")
     @classmethod
