@@ -33,10 +33,10 @@ import logging
 from fastapi import Request, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.database import get_db, User
+from app.database import get_db, User, AccountantDevice
 from app.services.auth_service import decode_access_token
 
-from jose import JWTError
+from jose import JWTError, jwt as jose_jwt
 
 log = logging.getLogger(__name__)
 
@@ -851,3 +851,78 @@ def require_native_shell(action: str):
             "claims": claims,
         }
     return _dep
+
+
+# -----------------------------------------------------------------
+# DEPENDENCY: require_accountant
+# -----------------------------------------------------------------
+# PURPOSE:
+#   Validates the accountant-portal JWT (iss="aurora-accountant")
+#   and confirms the device is still active (not revoked).
+#   Returns (User, device_id) so any Vault / accountant route can
+#   Depends(require_accountant) without duplicating auth logic.
+#
+# HOW IT'S USED:
+#   @router.get("/api/v1/accountant/vault/...")
+#   def list_docs(auth=Depends(require_accountant), db=Depends(get_db)):
+#       user, device_id = auth
+# -----------------------------------------------------------------
+
+_ACCOUNTANT_JWT_ISSUER = "aurora-accountant"
+_ACCOUNTANT_JWT_ALGO = "HS256"
+
+
+def _accountant_signing_key() -> str:
+    key = (os.getenv("JWT_SECRET") or os.getenv("JWT_SIGNING_KEY") or "").strip()
+    if not key:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "server_misconfiguration", "message": "JWT signing key not set."},
+        )
+    return key
+
+
+def require_accountant(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> tuple[User, int]:
+    """FastAPI dependency: validate accountant access token, return (User, device_id)."""
+    auth = (request.headers.get("Authorization") or "").strip()
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(401, detail={"error": "missing_token", "message": "Authorization header required."})
+    token = auth.split(" ", 1)[1].strip()
+
+    try:
+        claims = jose_jwt.decode(
+            token,
+            _accountant_signing_key(),
+            algorithms=[_ACCOUNTANT_JWT_ALGO],
+            options={"verify_aud": False},
+        )
+    except Exception as exc:
+        log.warning("[require_accountant] JWT decode failed: %s", exc)
+        raise HTTPException(401, detail={"error": "invalid_token", "message": "Access token is invalid or expired."})
+
+    if claims.get("iss") != _ACCOUNTANT_JWT_ISSUER:
+        raise HTTPException(401, detail={"error": "invalid_token_issuer", "message": "Token issuer mismatch."})
+
+    user_id = claims.get("sub")
+    device_id = claims.get("device_id")
+    if not user_id or not device_id:
+        raise HTTPException(401, detail={"error": "invalid_token_claims", "message": "Token claims incomplete."})
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_active or (user.role or "").lower() != "accountant":
+        raise HTTPException(403, detail={"error": "not_an_accountant", "message": "Account not authorised."})
+
+    dev = (
+        db.query(AccountantDevice)
+        .filter(AccountantDevice.id == device_id)
+        .filter(AccountantDevice.user_id == user.id)
+        .filter(AccountantDevice.revoked_at.is_(None))
+        .first()
+    )
+    if not dev:
+        raise HTTPException(401, detail={"error": "device_revoked", "message": "This device has been revoked."})
+
+    return user, device_id

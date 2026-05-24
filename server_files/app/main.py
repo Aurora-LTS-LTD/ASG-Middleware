@@ -120,6 +120,11 @@ app.add_middleware(
         "https://app.aurora-ltd.co.il",        # forward-compat: future authenticated SPA
         "https://console.api-aurora-lts.com",  # Executive Cockpit (Appendix M — primary)
         "https://admin.aurora-ltd.co.il",      # legacy admin URL — REMOVE in Appendix M P10 cutover
+        # Sprint 8.2.1 — Accountant Portal (Tauri desktop app)
+        "https://api-aurora-lts.com",          # API-origin browser fetch from portal web layer
+        "https://portal.api-aurora-lts.com",   # portal download/landing page
+        "tauri://localhost",                    # Tauri renderer on macOS + Linux
+        "https://tauri.localhost",              # Tauri renderer on Windows
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
