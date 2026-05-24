@@ -159,8 +159,11 @@ def run_phase21_migrations() -> None:
     except Exception as e:
         log.error("[MIGRATE_P21] Unexpected error (non-fatal): %s", e)
 
-    if not (os.getenv("JWT_SIGNING_KEY") or "").strip():
+    jwt_key = (os.getenv("JWT_SECRET") or os.getenv("JWT_SIGNING_KEY") or "").strip()
+    if not jwt_key:
         log.warning(
-            "[MIGRATE_P21] JWT_SIGNING_KEY not set — accountant access-token "
-            "issuance will 500. Set env var before clients start signing in."
+            "[MIGRATE_P21] JWT_SECRET / JWT_SIGNING_KEY not set — accountant "
+            "access-token issuance will 500. Set env var before clients start signing in."
         )
+    else:
+        log.info("[MIGRATE_P21] JWT signing key present (length=%d)", len(jwt_key))

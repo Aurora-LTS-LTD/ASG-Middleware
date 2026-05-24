@@ -238,13 +238,16 @@ def _ip_hash(request: Request) -> str:
 
 
 def _signing_key() -> str:
-    key = (os.getenv("JWT_SIGNING_KEY") or "").strip()
+    # The Cloud Run env uses JWT_SECRET; older code path used
+    # JWT_SIGNING_KEY. Accept either for compatibility — JWT_SECRET
+    # takes precedence if both are set.
+    key = (os.getenv("JWT_SECRET") or os.getenv("JWT_SIGNING_KEY") or "").strip()
     if not key:
         raise HTTPException(
             500,
             detail={
                 "error": "jwt_signing_key_missing",
-                "message": "JWT_SIGNING_KEY env var not configured",
+                "message": "JWT_SECRET env var not configured",
             },
         )
     return key

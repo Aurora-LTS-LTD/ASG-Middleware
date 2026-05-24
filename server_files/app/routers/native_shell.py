@@ -286,14 +286,16 @@ def _pem_encode(public_key_b64: str) -> str:
 
 
 def _signing_key() -> str:
-    key = (os.getenv("JWT_SIGNING_KEY") or "").strip()
+    # Cloud Run env uses JWT_SECRET; legacy code path used JWT_SIGNING_KEY.
+    # Accept either for compatibility.
+    key = (os.getenv("JWT_SECRET") or os.getenv("JWT_SIGNING_KEY") or "").strip()
     if not key:
         raise HTTPException(
             status_code=500,
             detail={
                 "error": "jwt_signing_key_missing",
                 "message": (
-                    "JWT_SIGNING_KEY env var is not configured. "
+                    "JWT_SECRET env var is not configured. "
                     "Native handshake cannot mint session tokens. "
                     "Check Cloud Run service config + Secret Manager."
                 ),

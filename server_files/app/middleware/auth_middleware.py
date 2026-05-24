@@ -713,11 +713,13 @@ def _resolve_native_session(request: Request, db: Session) -> "dict | None":
         request.state.native_session_verified = False
         return None
 
-    signing_key = (os.getenv("JWT_SIGNING_KEY") or "").strip()
+    # Cloud Run env uses JWT_SECRET; older code path used JWT_SIGNING_KEY.
+    # Accept either — JWT_SECRET takes precedence if both set.
+    signing_key = (
+        os.getenv("JWT_SECRET") or os.getenv("JWT_SIGNING_KEY") or ""
+    ).strip()
     if not signing_key:
-        # Config error — log loud but don't raise. The require_native_shell
-        # gate will catch the absence of `native_session_verified=True`.
-        log.error("[_resolve_native_session] JWT_SIGNING_KEY not configured")
+        log.error("[_resolve_native_session] JWT_SECRET / JWT_SIGNING_KEY not configured")
         request.state.native_session_verified = False
         return None
 
