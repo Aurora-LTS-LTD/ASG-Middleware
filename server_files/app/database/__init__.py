@@ -79,4 +79,7 @@ from app.database.models import (
     AccountantDevice,
     AccountantRefreshToken,
     AccountantOtpAttempt,
+    # Sprint 8.3 — Document Vault DB Layer (Phase 21 vault)
+    ClientDocument,
+    VaultIngestionAddress,
 )

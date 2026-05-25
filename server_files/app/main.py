@@ -364,6 +364,17 @@ async def startup():
     except Exception as e:
         print(f"[STARTUP] Phase 21 migration warning: {e}")
 
+    # ── Run Phase 21 Vault DB migrations (Sprint 8.3 — Document Vault) ──
+    # Provisions client_documents + vault_ingestion_addresses tables
+    # with the 7-year-retention CHECK constraints, builds composite
+    # indexes, and backfills a unique 16-hex email-alias token for
+    # every Organization that lacks one. Idempotent; safe on every boot.
+    try:
+        from app.migrations.migrate_phase21_vault import run_phase21_vault_migrations
+        run_phase21_vault_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
+
     # ── Start WhatsApp outbound-resend worker (always on) ──
     # Safe to run even if Meta creds aren't set — the worker no-ops
     # until is_configured() is true, then starts draining the queue.

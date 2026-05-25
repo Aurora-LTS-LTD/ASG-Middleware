@@ -33,7 +33,10 @@ from sqlalchemy import (
     Index,          # Named index for faster lookups
     LargeBinary,    # Raw bytes (challenge_bytes for native shell handshake — Sprint 8.2)
     text as sa_text,  # Raw SQL fragment — used for partial-index WHERE clauses
+    JSON,           # Cross-dialect JSON — falls back to TEXT on SQLite
+    CheckConstraint, # Sprint 8.3 — 7-year retention + soft-delete invariants
 )
+from sqlalchemy.dialects.postgresql import JSONB  # Sprint 8.3 — JSONB on Postgres
 from sqlalchemy.orm import relationship  # Defines connections between tables
 
 from app.database.connection import Base  # The base class all models inherit from
@@ -2958,4 +2961,181 @@ class AccountantOtpAttempt(Base):
             "email", "issued_at",
             postgresql_where=sa_text("consumed_at IS NULL"),
         ),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL: ClientDocument   (Sprint 8.3 — Document Vault DB Layer)
+# ═══════════════════════════════════════════════════════════════
+# Every file that lands in the Document Vault — whether forwarded by
+# the client via WhatsApp, emailed to their personal vault alias, or
+# uploaded manually by their accountant — becomes a row in this table.
+#
+# The row carries:
+#   - Routing metadata     (agency_id, client_id, uploaded_by_vector)
+#   - Object-store pointer (s3_bucket / s3_key — the file itself never
+#                            lives in Postgres, only its checksum + ref)
+#   - Content fingerprint  (sha256, mime_type, size_bytes) for dedup
+#                            and forensic chain-of-custody
+#   - Classification slot  (document_type, tax_year, extracted_metadata)
+#                            populated asynchronously by the OCR + ML
+#                            classifier worker
+#   - Compliance lifecycle (created_at, archived_until, deleted_at)
+#
+# COMPLIANCE INVARIANTS (DB-level, not application-level):
+#
+#   1. 7-year retention   — Israeli Tax Ordinance §134B requires
+#      taxpayers to retain books and records for 7 calendar years.
+#      `archived_until` MUST be at least 7 years after `created_at`.
+#      A CHECK constraint enforces this at write time — the application
+#      cannot accidentally set a shorter retention window.
+#
+#   2. Retention lock     — `deleted_at` may only be populated AFTER
+#      `archived_until` has passed. A CHECK constraint blocks
+#      premature soft-deletes regardless of code path. The audit
+#      trail is therefore tamper-evident at the database level.
+#
+# These constraints intentionally use PostgreSQL interval syntax. The
+# table is provisioned in production against Postgres; local SQLite
+# dev runs the same model but skips the temporal CHECK (SQLite has no
+# `interval` keyword — the constraint is added in the Postgres-only
+# migration `migrate_phase21_vault.py`).
+# ═══════════════════════════════════════════════════════════════
+class ClientDocument(Base):
+    __tablename__ = "client_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # ── Routing ──
+    # `agency_id` = the accountant's firm (an Organization with the
+    # "agency" sub-type). `client_id` = the SMB whose books the agency
+    # is keeping. Both are foreign keys to organizations.
+    agency_id = Column(
+        Integer,
+        ForeignKey("organizations.id"),
+        index=True,
+        nullable=False,
+    )
+    client_id = Column(
+        Integer,
+        ForeignKey("organizations.id"),
+        index=True,
+        nullable=False,
+    )
+
+    # How the document entered the vault — drives the upstream
+    # classification pipeline and the audit narrative.
+    uploaded_by_vector = Column(String(16), nullable=False)
+    # "whatsapp" | "email" | "manual"
+
+    # ── Object-store pointer (file itself lives in S3 / GCS) ──
+    s3_key = Column(String(512), unique=True, nullable=False)
+    s3_bucket = Column(String(120), nullable=False)
+
+    # ── Classification slot (populated by async classifier worker) ──
+    document_type = Column(String(24), default="unclassified", nullable=False)
+    # "invoice" | "receipt" | "bank_statement" | "tax_form" | ...
+
+    # ── File metadata + content fingerprint ──
+    file_name = Column(String(255), nullable=False)
+    mime_type = Column(String(80), nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    sha256 = Column(String(64), index=True, nullable=False)
+
+    # ── Provenance ──
+    sender_phone_e164 = Column(String(20), nullable=True)
+    sender_email = Column(String(255), nullable=True)
+    extracted_metadata = Column(
+        JSON().with_variant(JSONB(), "postgresql"),
+        nullable=True,
+    )
+
+    # ── Tax-period + lifecycle ──
+    tax_year = Column(Integer, index=True, nullable=False)
+    status = Column(String(16), default="received", nullable=False)
+    # "received" | "classified" | "exported" | "archived" | "error"
+    error_reason = Column(String, nullable=True)
+
+    # ── Compliance timestamps ──
+    created_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        nullable=False,
+    )
+    archived_until = Column(DateTime, index=True, nullable=False)
+    deleted_at = Column(DateTime, nullable=True)
+
+    # ── Compliance constraints (Postgres-enforced) ──
+    __table_args__ = (
+        CheckConstraint(
+            "archived_until >= created_at + interval '7 years'",
+            name="compliance_7_year_retention_check",
+        ),
+        CheckConstraint(
+            "deleted_at IS NULL OR deleted_at > archived_until",
+            name="retention_lock_prevent_premature_delete",
+        ),
+        Index(
+            "ix_client_doc_agency_client",
+            "agency_id", "client_id",
+        ),
+        Index(
+            "ix_client_doc_taxyear_status",
+            "tax_year", "status",
+        ),
+        Index(
+            "ix_client_doc_client_created",
+            "client_id", "created_at",
+        ),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL: VaultIngestionAddress   (Sprint 8.3 — Document Vault Router)
+# ═══════════════════════════════════════════════════════════════
+# Each client organization gets exactly ONE row that maps:
+#
+#   {email_alias_token, whatsapp_e164}  →  client_id
+#
+# Clients forward documents to:
+#
+#   vault+<email_alias_token>@api-aurora-lts.com
+#       OR
+#   WhatsApp DID associated with the agency, which routes by
+#   sender phone number against `whatsapp_e164`.
+#
+# `email_alias_token` is a high-entropy 16-character hex string. It's
+# unguessable enough that an attacker who knows a client's name still
+# cannot guess the alias. Tokens are stable for life — once printed
+# in onboarding material, they do not rotate without explicit admin
+# action (rotation would invalidate the printed handouts).
+#
+# `whatsapp_e164` is optional because not every client links a phone;
+# email-only ingestion is supported.
+#
+# `active=False` disables ingestion without deleting the row, so the
+# audit chain `email_alias_token → historical_client_id` survives.
+# ═══════════════════════════════════════════════════════════════
+class VaultIngestionAddress(Base):
+    __tablename__ = "vault_ingestion_addresses"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    client_id = Column(
+        Integer,
+        ForeignKey("organizations.id"),
+        unique=True,
+        nullable=False,
+    )
+
+    email_alias_token = Column(String(48), unique=True, nullable=False)
+    # 16-hex-char by default (8 bytes from secrets.token_hex). Width 48
+    # leaves headroom for future longer tokens.
+
+    whatsapp_e164 = Column(String(20), index=True, nullable=True)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        nullable=False,
     )
