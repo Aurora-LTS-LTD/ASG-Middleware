@@ -438,6 +438,29 @@ def require_admin(
         # BYPASS IAP enforcement — break-glass identity is sufficient.
         return current_user
 
+    # Step 2.75 — Native session bypass (Sprint 8.2 Mac Shell).
+    # A native_session JWT minted by /api/v1/admin/exec/native/handshake/finish
+    # carries iss="aurora-native-session". The Mac Shell is a native macOS
+    # app — it cannot present an X-Goog-Iap-Jwt-Assertion header. Possession
+    # of the Secure-Enclave-bound device-id (re-verified per-request against
+    # the NativeDeviceKey table) IS the second factor that IAP would
+    # otherwise provide. _resolve_native_session() re-validates signature,
+    # iss, AND that the device row is still active — so a revoked device
+    # fails immediately, not after the JWT TTL expires.
+    auth_claims = _extract_jwt_claims(request)
+    if auth_claims.get("iss") == _NATIVE_SESSION_ISSUER:
+        if _resolve_native_session(request, db) is not None:
+            return current_user
+        log.warning(
+            "[require_admin] native_session iss claim present but device "
+            "verification failed (user=%s path=%s)",
+            current_user.id, request.url.path,
+        )
+        raise HTTPException(
+            status_code=401,
+            detail="Native session token invalid or device revoked",
+        )
+
     # Step 3 — IAP enforcement (defense in depth on top of LB-layer IAP).
     if os.getenv("AURORA_ADMIN_REQUIRE_IAP", "0") == "1":
         iap_jwt = (request.headers.get("X-Goog-Iap-Jwt-Assertion") or "").strip()
