@@ -3139,3 +3139,31 @@ class VaultIngestionAddress(Base):
         default=datetime.datetime.utcnow,
         nullable=False,
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P1-22 — API KEYS (service-to-service authentication)
+# ═══════════════════════════════════════════════════════════════
+# Used by Make.com webhook relays + future integration partners.
+# The plaintext key is hashed (SHA-256) before persist — even a DB
+# leak does not expose usable credentials. Lookups are by hash, so
+# the plaintext is only known at mint time + held by the caller.
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Human label — what / who this key is for. NOT a secret.
+    name = Column(String(120), nullable=False, unique=True, index=True)
+
+    # SHA-256 hex digest of the plaintext key. The plaintext is shown
+    # to the operator once at mint time, then discarded.
+    key_hash = Column(String(64), nullable=False, unique=True, index=True)
+
+    # Optional scope string (free-form for now; e.g. 'make-webhook').
+    scope = Column(String(80), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)
+
