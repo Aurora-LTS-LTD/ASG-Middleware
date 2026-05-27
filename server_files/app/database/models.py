@@ -3266,3 +3266,41 @@ class FxRate(Base):
         UniqueConstraint("currency", "observed_date", name="uq_fx_currency_date"),
         Index("ix_fx_currency_date", "currency", "observed_date"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-06 — BANK STATEMENT ENTRIES (reconciliation engine)
+# ═══════════════════════════════════════════════════════════════
+# Rows ingested from bank statements (CSV upload today; Open Banking
+# AISP feed in the future when per-bank credentials are provisioned).
+# The reconciliation matcher tries to link each entry to an Invoice
+# by amount + date + counterparty fuzzy match.
+class BankStatementEntry(Base):
+    __tablename__ = "bank_statement_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+
+    # ── Transaction details from the bank ──
+    posted_at = Column(DateTime, nullable=False, index=True)
+    amount = Column(Float, nullable=False)         # positive = credit, negative = debit
+    currency = Column(String(3), nullable=False, default="ILS")
+    counterparty_name = Column(String(255), nullable=True)
+    reference = Column(String(120), nullable=True)  # bank's free-text memo
+    source_bank = Column(String(40), nullable=True)  # "leumi", "discount", ...
+    external_id = Column(String(120), nullable=True, index=True)  # idempotency
+
+    # ── Reconciliation state ──
+    # unmatched | suggested | linked | ignored
+    match_status = Column(String(16), nullable=False, default="unmatched", index=True)
+    matched_invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
+    match_confidence = Column(Float, nullable=True)   # 0.0–1.0 when matched
+    match_reason = Column(String(255), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    matched_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("business_id", "external_id", name="uq_bse_biz_extid"),
+        Index("ix_bse_business_status_date", "business_id", "match_status", "posted_at"),
+    )

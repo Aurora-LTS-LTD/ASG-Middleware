@@ -57,6 +57,7 @@ from app.routers.recurring_invoices import router as recurring_invoices_router  
 from app.routers.fx import router as fx_router                                      # P2-02 — BoI FX rates
 from app.routers.autonomous_agents import router as autonomous_agents_router        # P2-04 — agent dispatch
 from app.routers.credit_notes import router as credit_notes_router                  # P2-05 — credit notes (חשבונית זיכוי)
+from app.routers.banking import router as banking_router                            # P2-06 — payment reconciliation
 
 
 # ─────────────────────────────────────────────────────────────
@@ -208,6 +209,7 @@ app.include_router(recurring_invoices_router)    # P2-01 — recurring invoice e
 app.include_router(fx_router)                    # P2-02 — BoI FX rates
 app.include_router(autonomous_agents_router)     # P2-04 — agent dispatch
 app.include_router(credit_notes_router)          # P2-05 — credit notes
+app.include_router(banking_router)               # P2-06 — payment reconciliation
 
 
 # ─────────────────────────────────────────────────────────────
