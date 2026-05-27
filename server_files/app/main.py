@@ -55,6 +55,7 @@ from app.routers.accountant_dashboard import router as accountant_dashboard_rout
 from app.routers.accountant_vault import router as accountant_vault_router          # P1-17 — Accountant Portal manual vault upload
 from app.routers.recurring_invoices import router as recurring_invoices_router      # P2-01 — recurring invoice engine
 from app.routers.fx import router as fx_router                                      # P2-02 — BoI FX rates
+from app.routers.autonomous_agents import router as autonomous_agents_router        # P2-04 — agent dispatch
 
 
 # ─────────────────────────────────────────────────────────────
@@ -204,6 +205,7 @@ app.include_router(accountant_dashboard_router)  # P1-16 — Accountant Portal d
 app.include_router(accountant_vault_router)      # P1-17 — Accountant Portal manual vault upload
 app.include_router(recurring_invoices_router)    # P2-01 — recurring invoice engine
 app.include_router(fx_router)                    # P2-02 — BoI FX rates
+app.include_router(autonomous_agents_router)     # P2-04 — agent dispatch
 
 
 # ─────────────────────────────────────────────────────────────
