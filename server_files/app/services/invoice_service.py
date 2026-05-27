@@ -235,7 +235,11 @@ async def finalize_invoice(
     if invoice.requires_allocation == 1 and invoice.allocation_status == "pending":
         print(f"[INVOICE_SERVICE] Requesting allocation for {invoice.invoice_number} via {actor_label}...")
 
-        seller_tax_id = "000000000"  # TODO: read from business.tax_id when profile is set
+        # P1-05: resolve the real seller tax_id from the owning Business —
+        # raises SellerTaxIdMissing (caught by caller as 4xx/5xx) if the
+        # Business profile is incomplete. Never falls back to "000000000".
+        from app.services.tax_id_resolver import resolve_seller_tax_id
+        seller_tax_id = resolve_seller_tax_id(invoice, db)
         buyer_tax_id = invoice.beneficiary_tax_id or "000000000"
 
         # Sprint 3 — pass idempotency context to the new dispatcher.

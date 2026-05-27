@@ -90,7 +90,22 @@ async def process_pending_allocations(bot=None) -> int:
             print(f"[ALLOC_QUEUE] Retrying allocation for {invoice.invoice_number} "
                   f"(attempt #{invoice.allocation_retry_count + 1})")
 
-            seller_tax_id = "000000000"  # TODO: read from business.tax_id
+            # P1-05: resolve real seller tax_id; if the Business profile
+            # is incomplete, surface as a non-retriable error so the row
+            # doesn't churn through MAX_RETRIES with a placeholder.
+            from app.services.tax_id_resolver import (
+                resolve_seller_tax_id,
+                SellerTaxIdMissing,
+            )
+            try:
+                seller_tax_id = resolve_seller_tax_id(invoice, db)
+            except SellerTaxIdMissing as exc:
+                print(f"[ALLOC_QUEUE] {exc} — marking failed (non-retriable)")
+                invoice.allocation_status = "rejected"
+                invoice.allocation_retry_count = MAX_RETRIES  # halt retries
+                db.commit()
+                continue
+
             buyer_tax_id = invoice.beneficiary_tax_id or "000000000"
 
             try:
