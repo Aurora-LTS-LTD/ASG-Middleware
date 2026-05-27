@@ -52,6 +52,7 @@ from app.routers.admin_exec import router as admin_exec_router               # A
 from app.routers.native_shell import router as native_shell_router           # Sprint 8.2 — Aurora Mac Shell hardware binding (Phase 20)
 from app.routers.accountant_auth import router as accountant_auth_router    # Sprint 8.2 sibling — Accountant Portal auth (Phase 21)
 from app.routers.accountant_dashboard import router as accountant_dashboard_router  # P1-16 — Accountant Portal dashboard KPIs
+from app.routers.accountant_vault import router as accountant_vault_router          # P1-17 — Accountant Portal manual vault upload
 
 
 # ─────────────────────────────────────────────────────────────
@@ -198,6 +199,7 @@ app.include_router(admin_exec_router)        # Appendix H — Tier 1 CEO Executi
 app.include_router(native_shell_router)      # Sprint 8.2 — Aurora Mac Shell handshake + device list/revoke
 app.include_router(accountant_auth_router)   # Sprint 8.2 sibling — Accountant Portal OTP + device mgmt
 app.include_router(accountant_dashboard_router)  # P1-16 — Accountant Portal dashboard KPIs
+app.include_router(accountant_vault_router)      # P1-17 — Accountant Portal manual vault upload
 
 
 # ─────────────────────────────────────────────────────────────
