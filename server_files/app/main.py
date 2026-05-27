@@ -184,6 +184,15 @@ async def startup():
     print("  ASG Solutions API v2.0.0")
     print("  Starting up...")
     print("=" * 50)
+
+    # ── Validate required secrets before anything else ──
+    # In production (AURORA_RUNTIME=cloud_run): raises RuntimeError on the
+    # first missing / placeholder secret — Cloud Run will not mark the
+    # instance healthy, preventing a broken deploy from serving traffic.
+    # In dev mode: logs warnings and continues.
+    from app.config.secrets import validate_all_secrets
+    validate_all_secrets()
+
     create_tables()
 
     # ── Run Phase 4 DB migrations (adds new columns safely) ──
@@ -385,33 +394,48 @@ async def startup():
     except Exception as e:
         print(f"[STARTUP] ⚠️ WhatsApp resend worker failed to start: {e}")
 
-    # ── Seed default admin user (runs once) ──
-    # GUARDED in production via SKIP_SEED_ADMIN=1. The hard-coded
-    # "admin@asg.com / admin123" credentials are appropriate ONLY for
-    # local development. On Cloud Run the production admin is created
-    # via the one-shot scripts/bootstrap_admin.py job (env-driven
-    # email + Secret-Manager-issued password).
-    if os.getenv("SKIP_SEED_ADMIN", "").strip() in ("1", "true", "TRUE"):
-        print("[STARTUP] SKIP_SEED_ADMIN set — skipping default admin seed (production mode)")
+    # ── Seed default admin user (dev only — never runs on Cloud Run) ──
+    # Credentials are read from environment variables so they are NEVER
+    # hardcoded in source.  Set in .env for local development:
+    #
+    #   AURORA_SEED_ADMIN_EMAIL=dev-admin@aurora-lts.local
+    #   AURORA_SEED_ADMIN_PASSWORD=<generate with secrets.token_urlsafe(16)>
+    #
+    # On Cloud Run (AURORA_RUNTIME=cloud_run) this block is skipped
+    # entirely regardless of SKIP_SEED_ADMIN.  The production admin is
+    # created once via the one-shot scripts/bootstrap_admin.py job.
+    _is_cloud_run = os.getenv("AURORA_RUNTIME", "").lower() == "cloud_run"
+    _skip_seed = os.getenv("SKIP_SEED_ADMIN", "").strip() in ("1", "true", "TRUE")
+
+    if _is_cloud_run or _skip_seed:
+        print("[STARTUP] Admin seed skipped (cloud_run or SKIP_SEED_ADMIN set)")
     else:
-        db = SessionLocal()
-        try:
-            admin = db.query(User).filter(User.role == "admin").first()
-            if not admin:
-                from app.services.auth_service import hash_password
-                admin = User(
-                    email="admin@asg.com",
-                    password_hash=hash_password("admin123"),
-                    full_name="Ibrahim Masarwa",
-                    role="admin",
-                )
-                db.add(admin)
-                db.commit()
-                print("[STARTUP] Default admin created: admin@asg.com / admin123")
-            else:
-                print(f"[STARTUP] Admin exists: {admin.email}")
-        finally:
-            db.close()
+        _seed_email = os.getenv("AURORA_SEED_ADMIN_EMAIL", "").strip()
+        _seed_password = os.getenv("AURORA_SEED_ADMIN_PASSWORD", "").strip()
+        if not _seed_email or not _seed_password:
+            print(
+                "[STARTUP] Admin seed skipped — set AURORA_SEED_ADMIN_EMAIL and "
+                "AURORA_SEED_ADMIN_PASSWORD in .env to auto-create a dev admin."
+            )
+        else:
+            db = SessionLocal()
+            try:
+                admin = db.query(User).filter(User.role == "admin").first()
+                if not admin:
+                    from app.services.auth_service import hash_password
+                    admin = User(
+                        email=_seed_email,
+                        password_hash=hash_password(_seed_password),
+                        full_name="Dev Admin",
+                        role="admin",
+                    )
+                    db.add(admin)
+                    db.commit()
+                    print(f"[STARTUP] Dev admin created: {_seed_email}")
+                else:
+                    print(f"[STARTUP] Admin exists: {admin.email}")
+            finally:
+                db.close()
 
     # ── Ensure writable runtime dirs exist ──
     # Cloud Run filesystems are read-only EXCEPT /tmp. So in cloud-run mode

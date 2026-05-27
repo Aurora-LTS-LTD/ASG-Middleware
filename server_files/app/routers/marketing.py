@@ -120,7 +120,8 @@ def _rate_limit_ok(ip_hash: str) -> bool:
 # ─────────────────────────────────────────────────────────────
 def _hash_ip(raw_ip: str) -> str:
     """SHA-256(IP_HASH_SALT + raw_ip). We never store the raw IP."""
-    salt = os.getenv("AURORA_IP_HASH_SALT", "aurora-default-salt-rotate-me")
+    from app.config.secrets import require_secret
+    salt = require_secret("AURORA_IP_HASH_SALT", min_length=16)
     return hashlib.sha256(f"{salt}:{raw_ip}".encode("utf-8")).hexdigest()
 
 

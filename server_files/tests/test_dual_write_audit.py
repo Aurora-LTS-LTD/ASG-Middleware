@@ -129,11 +129,14 @@ def cleanup_business_chain(business_id: int, also_user_ids: Optional[list] = Non
 # Auth helper — log in as the seeded admin
 # ─────────────────────────────────────────────────────────────
 def admin_login() -> str:
-    """Return a JWT for the seeded admin (admin@asg.com / admin123)."""
+    """Return a JWT for the seeded dev admin (credentials from env vars)."""
+    import os
+    email = os.getenv("AURORA_SEED_ADMIN_EMAIL", "dev-admin@aurora-lts.local")
+    password = os.getenv("AURORA_SEED_ADMIN_PASSWORD", "")
     with httpx.Client(timeout=10.0) as client:
         r = client.post(
             f"{BASE_URL}/api/v1/auth/login",
-            json={"email": "admin@asg.com", "password": "admin123"},
+            json={"email": email, "password": password},
         )
         r.raise_for_status()
         return r.json()["access_token"]
