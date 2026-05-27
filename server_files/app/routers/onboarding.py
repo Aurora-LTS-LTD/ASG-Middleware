@@ -80,6 +80,7 @@ from app.services.onboarding import (
     abandon_onboarding,
     OnboardingError,
 )
+from app.services.onboarding.otp_service import OtpDeliveryError
 
 
 # ─────────────────────────────────────────────────────────────
@@ -368,11 +369,14 @@ def send_phone_otp(
             channel="phone",
             target=payload.target.strip(),
             purpose=payload.purpose or "signup",
+            lang=current_user.language_pref or "he",
             db=db,
             request_ip=request.client.host if request.client else None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except OtpDeliveryError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     return result
 
 
@@ -419,11 +423,14 @@ def send_email_otp(
             channel="email",
             target=payload.target.strip().lower(),
             purpose=payload.purpose or "signup",
+            lang=current_user.language_pref or "he",
             db=db,
             request_ip=request.client.host if request.client else None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except OtpDeliveryError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     return result
 
 

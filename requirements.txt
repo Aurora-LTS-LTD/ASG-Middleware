@@ -39,3 +39,7 @@ google-cloud-bigquery>=3.20,<4
 
 # ── Product Upgrade #1 — Gemini Flash via Vertex AI (lazy-imported) ──
 google-cloud-aiplatform>=1.55,<2
+
+# ── P0-06 — OTP delivery + phone validation ──
+# phonenumbers: E.164 normalization + Israeli number validation before dispatch
+phonenumbers>=9.0,<10

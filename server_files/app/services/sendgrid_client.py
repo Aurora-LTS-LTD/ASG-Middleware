@@ -207,6 +207,84 @@ def send_whatsapp_otp(to_phone_e164: str, otp: str) -> None:
         raise RuntimeError(f"WhatsApp OTP network error: {exc}") from exc
 
 
+def send_onboarding_otp_email(
+    to_email: str,
+    otp: str,
+    ttl_minutes: int = 10,
+    lang: str = "he",
+) -> None:
+    """Send a 6-digit OTP to a new business owner during onboarding.
+
+    Distinct from send_otp() (which is accountant-portal-only and has a
+    60-second copy). Onboarding OTPs have a 10-minute TTL and
+    trilingual support (he/ar/en) matching the user's language_pref.
+
+    Args:
+        to_email:    Destination email address.
+        otp:         6-digit OTP code (server-generated).
+        ttl_minutes: OTP lifetime in minutes (default 10).
+        lang:        Language code 'he' | 'ar' | 'en'. Default 'he'.
+    """
+    _COPY = {
+        "he": {
+            "subject": "קוד האימות שלך ב-Aurora LTS",
+            "heading": "קוד האימות שלך",
+            "body": f"הזן קוד זה בשלב האימות של ההרשמה ל-Aurora LTS. "
+                    f"הקוד תקף ל-<strong style=\"color:#f4f4f5;\">{ttl_minutes} דקות</strong>.",
+            "footer": "לא ביקשת קוד זה? אפשר להתעלם ממייל זה בבטחה.",
+            "dir": "rtl",
+        },
+        "ar": {
+            "subject": "رمز التحقق الخاص بك في Aurora LTS",
+            "heading": "رمز التحقق الخاص بك",
+            "body": f"أدخل هذا الرمز في خطوة التحقق من التسجيل في Aurora LTS. "
+                    f"الرمز صالح لمدة <strong style=\"color:#f4f4f5;\">{ttl_minutes} دقيقة</strong>.",
+            "footer": "لم تطلب هذا الرمز؟ يمكنك تجاهل هذا البريد بأمان.",
+            "dir": "rtl",
+        },
+        "en": {
+            "subject": "Your Aurora LTS verification code",
+            "heading": "Your verification code",
+            "body": f"Enter this code in the Aurora LTS signup flow. "
+                    f"It expires in <strong style=\"color:#f4f4f5;\">{ttl_minutes} minutes</strong>.",
+            "footer": "If you didn't request this code, you can safely ignore this email.",
+            "dir": "ltr",
+        },
+    }
+    copy = _COPY.get(lang, _COPY["he"])
+
+    html = f"""<!DOCTYPE html>
+<html lang="{lang}" dir="{copy['dir']}">
+<body style="margin:0;padding:40px 0;background:#09090b;font-family:system-ui,sans-serif;">
+  <div style="max-width:480px;margin:0 auto;background:#18181b;border:1px solid #27272a;
+              border-radius:12px;padding:40px;">
+    <div style="margin-bottom:28px;">
+      <div style="display:inline-block;background:#4f46e5;border-radius:8px;
+                  padding:10px 14px;font-size:20px;font-weight:700;color:#fff;
+                  letter-spacing:-0.5px;">A</div>
+    </div>
+    <h1 style="margin:0 0 8px;font-size:22px;color:#f4f4f5;font-weight:600;">
+      {copy['heading']}
+    </h1>
+    <p style="margin:0 0 28px;color:#a1a1aa;font-size:14px;line-height:1.6;">
+      {copy['body']}
+    </p>
+    <div style="background:#09090b;border:1px solid #27272a;border-radius:8px;
+                padding:24px;text-align:center;margin-bottom:28px;">
+      <span style="font-size:36px;font-weight:700;letter-spacing:12px;
+                   color:#818cf8;font-variant-numeric:tabular-nums;">{otp}</span>
+    </div>
+    <p style="margin:0;color:#71717a;font-size:12px;line-height:1.6;">
+      {copy['footer']}
+    </p>
+  </div>
+</body>
+</html>"""
+
+    plain = f"{copy['heading']}: {otp}\n\n({ttl_minutes} min expiry)\n\n{copy['footer']}"
+    _send(to_email, copy["subject"], html, plain)
+
+
 def send_new_device_alert(
     to_email: str,
     accountant_name: str,
