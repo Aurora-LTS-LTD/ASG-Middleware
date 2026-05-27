@@ -24,10 +24,13 @@ OBJECT KEY SCHEME:
 
 import datetime
 import hashlib
+import json
+import logging
 import os
 import pathlib
 from typing import Optional
 
+log = logging.getLogger(__name__)
 
 STORAGE_BACKEND = (os.getenv("STORAGE_BACKEND") or "stub").strip().lower()
 
@@ -195,3 +198,100 @@ def exists(*, object_key: str) -> bool:
         return bucket.blob(object_key).exists()
 
     raise ValueError(f"Unknown STORAGE_BACKEND='{STORAGE_BACKEND}'")
+
+
+# ─────────────────────────────────────────────────────────────
+# KYC — signed PUT URLs  (separate from receipts signed_url above)
+# Uses the KYC service account key (GCS_KYC_SA_KEY_JSON) for signing
+# because Cloud Run Workload Identity does not expose a private key,
+# which is required for v4 signed URL generation.
+# ─────────────────────────────────────────────────────────────
+
+def _kyc_credentials():
+    """
+    Return google.oauth2.service_account.Credentials for the KYC bucket.
+
+    Reads GCS_KYC_SA_KEY_JSON from env. Accepted formats:
+      - A JSON string:  '{"type": "service_account", ...}'
+      - A file path:    '/run/secrets/kyc-sa-key.json'
+
+    Raises ValueError clearly if the env var is absent when KYC_BACKEND=gcs,
+    so the error message is actionable rather than a cryptic SDK crash.
+    """
+    raw = (os.getenv("GCS_KYC_SA_KEY_JSON") or "").strip()
+    if not raw:
+        raise ValueError(
+            "GCS_KYC_SA_KEY_JSON is not set. "
+            "Provide the KYC service account key JSON (string or file path) "
+            "or set KYC_BACKEND=stub for local development."
+        )
+
+    # Detect file-path vs. inline JSON
+    if raw.startswith("{"):
+        key_data = json.loads(raw)
+    else:
+        with open(raw) as fh:
+            key_data = json.load(fh)
+
+    from google.oauth2 import service_account  # lazy import
+    return service_account.Credentials.from_service_account_info(
+        key_data,
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+
+
+def signed_put_url(
+    *,
+    bucket: str,
+    object_key: str,
+    mime_type: str,
+    max_bytes: int,
+    ttl_seconds: int = 900,
+) -> str:
+    """
+    Generate a v4 signed PUT URL that the browser uses to upload a KYC
+    document directly to GCS — FastAPI never proxies the bytes.
+
+    Security constraints encoded into the URL signature:
+      - content_type=mime_type: GCS rejects PUTs with a different Content-Type
+      - x-goog-content-length-range: GCS rejects uploads outside [1, max_bytes]
+        at the TCP layer — a 5 GB upload is closed before a single byte lands
+
+    KYC_BACKEND=stub: returns the local upload-stub URL for dev/test.
+    KYC_BACKEND=gcs:  generates a real v4 signed URL using the KYC SA key.
+    """
+    kyc_backend = (os.getenv("KYC_BACKEND") or "stub").strip().lower()
+
+    if kyc_backend == "stub":
+        # In stub mode, the "signed URL" points to the local FastAPI endpoint.
+        public_base = os.getenv("ONBOARDING_PUBLIC_URL", "http://localhost:8000/onboarding")
+        api_base = public_base.replace("/onboarding", "").rstrip("/")
+        return f"{api_base}/api/v1/onboarding/documents/{object_key}/upload-stub"
+
+    if kyc_backend == "gcs":
+        import datetime as dt
+
+        # Validate credentials before importing the SDK so errors are always
+        # a clear ValueError (not a cryptic ModuleNotFoundError).
+        creds = _kyc_credentials()
+        from google.cloud import storage as gcs_sdk  # lazy import
+        client = gcs_sdk.Client(credentials=creds)
+        blob = client.bucket(bucket).blob(object_key)
+
+        url = blob.generate_signed_url(
+            version="v4",
+            expiration=dt.timedelta(seconds=ttl_seconds),
+            method="PUT",
+            content_type=mime_type,
+            # x-goog-content-length-range causes GCS to reject uploads
+            # below 1 byte or above max_bytes at the network level.
+            headers={"x-goog-content-length-range": f"1,{max_bytes}"},
+            credentials=creds,
+        )
+        log.info(
+            "[kyc/gcs] signed PUT URL generated bucket=%s key=%s ttl=%ds",
+            bucket, object_key, ttl_seconds,
+        )
+        return url
+
+    raise ValueError(f"Unknown KYC_BACKEND='{kyc_backend}'")
