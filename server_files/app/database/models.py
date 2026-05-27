@@ -3167,3 +3167,50 @@ class ApiKey(Base):
     last_used_at = Column(DateTime, nullable=True)
     revoked_at = Column(DateTime, nullable=True)
 
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-01 — RECURRING INVOICE SCHEDULES
+# ═══════════════════════════════════════════════════════════════
+# A template for an invoice that should be issued at a fixed
+# cadence (e.g. "10,000 ILS from Customer X on the 1st of every
+# month"). The tick worker queries `next_due_at <= now() AND active`,
+# creates a draft invoice via services/invoice_service.create_draft_invoice,
+# and advances next_due_at by `cadence`.
+class RecurringInvoiceSchedule(Base):
+    __tablename__ = "recurring_invoice_schedules"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    business_id = Column(
+        Integer, ForeignKey("businesses.id"), nullable=False, index=True
+    )
+
+    # Invoice template fields — mirror create_draft_invoice args.
+    beneficiary_name = Column(String(200), nullable=False)
+    beneficiary_tax_id = Column(String(32), nullable=True)
+    beneficiary_contact = Column(String(255), nullable=True)
+    amount_net = Column(Float, nullable=False)
+    description = Column(String, nullable=True)
+
+    # Cadence — one of: "weekly" "monthly" "quarterly" "yearly".
+    cadence = Column(String(16), nullable=False)
+
+    # Driver state — when the NEXT invoice should be minted.
+    next_due_at = Column(DateTime, nullable=False, index=True)
+    # When the LAST invoice was minted (null on a brand-new schedule).
+    last_run_at = Column(DateTime, nullable=True)
+
+    # Soft delete — flip to False to stop generating without losing
+    # the audit trail of past runs.
+    active = Column(Boolean, default=True, nullable=False, index=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_recurring_due_active",
+            "next_due_at", "active",
+        ),
+    )

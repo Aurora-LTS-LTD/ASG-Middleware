@@ -57,3 +57,9 @@ limits>=3.6,<4
 # (idempotent). On first boot Alembic stamps the current schema as
 # baseline "0001"; subsequent boots upgrade head if new revisions exist.
 alembic>=1.13,<2
+
+# ── P2-01 — Recurring invoice cadence math ──
+# dateutil.relativedelta handles month-aware "+1 month" without drift
+# (Jan 31 + 1 month → Feb 28/29, not "March 3"). Python's stdlib
+# timedelta cannot express "1 month" — only fixed durations.
+python-dateutil>=2.9,<3

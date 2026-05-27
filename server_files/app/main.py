@@ -53,6 +53,7 @@ from app.routers.native_shell import router as native_shell_router           # S
 from app.routers.accountant_auth import router as accountant_auth_router    # Sprint 8.2 sibling — Accountant Portal auth (Phase 21)
 from app.routers.accountant_dashboard import router as accountant_dashboard_router  # P1-16 — Accountant Portal dashboard KPIs
 from app.routers.accountant_vault import router as accountant_vault_router          # P1-17 — Accountant Portal manual vault upload
+from app.routers.recurring_invoices import router as recurring_invoices_router      # P2-01 — recurring invoice engine
 
 
 # ─────────────────────────────────────────────────────────────
@@ -200,6 +201,7 @@ app.include_router(native_shell_router)      # Sprint 8.2 — Aurora Mac Shell h
 app.include_router(accountant_auth_router)   # Sprint 8.2 sibling — Accountant Portal OTP + device mgmt
 app.include_router(accountant_dashboard_router)  # P1-16 — Accountant Portal dashboard KPIs
 app.include_router(accountant_vault_router)      # P1-17 — Accountant Portal manual vault upload
+app.include_router(recurring_invoices_router)    # P2-01 — recurring invoice engine
 
 
 # ─────────────────────────────────────────────────────────────
