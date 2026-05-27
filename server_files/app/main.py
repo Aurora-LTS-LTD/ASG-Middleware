@@ -106,6 +106,21 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# ── X-Request-ID middleware (P1-07) ──
+# Tags every request with a UUID (or trusts the inbound X-Request-ID
+# from Cloud Run / Global LB). Echoed back in the response so clients
+# can quote it when filing tickets. Exposed via contextvars to
+# background tasks + the structured logger.
+from app.middleware.request_id import RequestIDMiddleware
+app.add_middleware(RequestIDMiddleware)
+
+# ── Global exception handlers (P1-06) ──
+# HTTPException re-emitted with request_id attached.
+# Uncaught Exception logged with full traceback + request_id, returned
+# to client as a safe JSON envelope (no traceback leak).
+from app.middleware.error_handlers import register_exception_handlers
+register_exception_handlers(app)
+
 
 # ─────────────────────────────────────────────────────────────
 # CORS MIDDLEWARE — production-grade allowlist (Phase 2 SEC-204)
