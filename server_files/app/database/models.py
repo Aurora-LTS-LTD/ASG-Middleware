@@ -3343,3 +3343,61 @@ class InvoicePayment(Base):
         UniqueConstraint("invoice_id", "bank_entry_id", name="uq_payment_invoice_bank"),
         Index("ix_invoice_payments_invoice_id", "invoice_id"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-08 — AML / SANCTIONS SCREENING
+# ═══════════════════════════════════════════════════════════════
+# Cached entries from public sanctions lists. Refreshed weekly via
+# Cloud Scheduler hitting POST /api/v1/aml/refresh-lists.
+class SanctionsListEntry(Base):
+    __tablename__ = "sanctions_list_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Source: "ofac_sdn" | "il_mof" | "eu_consolidated" | "uk_hmt"
+    list_source = Column(String(32), nullable=False, index=True)
+    # External ID within that list (OFAC uses an integer; we store as string).
+    external_id = Column(String(64), nullable=False, index=True)
+
+    full_name = Column(String(512), nullable=False, index=True)
+    # Other names / aliases stored as a single comma-separated string —
+    # avoids JSON storage on SQLite. Fine for fuzzy matching.
+    aliases = Column(String, nullable=True)
+
+    entity_type = Column(String(16), nullable=True)  # "individual" | "entity"
+    country_code = Column(String(8), nullable=True)
+    program = Column(String(120), nullable=True)     # e.g. "SDGT", "IRAN-EO13902"
+
+    last_updated_at = Column(DateTime, nullable=True)  # publisher date
+    fetched_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("list_source", "external_id", name="uq_sanctions_src_extid"),
+        Index("ix_sanctions_full_name", "full_name"),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-08 — Sanctions screening hit log
+# ═══════════════════════════════════════════════════════════════
+# Every screening call writes a row — high-score hits get human review.
+class SanctionsScreeningHit(Base):
+    __tablename__ = "sanctions_screening_hits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
+
+    queried_name = Column(String(512), nullable=False)
+    matched_entry_id = Column(
+        Integer, ForeignKey("sanctions_list_entries.id"), nullable=False,
+    )
+    match_score = Column(Float, nullable=False)
+    # "pending_review" | "false_positive" | "confirmed" | "ignored"
+    status = Column(String(24), nullable=False, default="pending_review", index=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    review_note = Column(String(500), nullable=True)
