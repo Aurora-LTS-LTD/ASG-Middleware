@@ -50,3 +50,10 @@ phonenumbers>=9.0,<10
 # RATE_LIMIT_BACKEND=memory (default) | redis (requires REDIS_URL)
 slowapi>=0.1.9,<1.0
 limits>=3.6,<4
+
+# ── P1-02 — Schema versioning via Alembic ──
+# New schema changes go through `alembic revision --autogenerate`.
+# Existing migrate_phase*.py files are frozen as-is and continue to run
+# (idempotent). On first boot Alembic stamps the current schema as
+# baseline "0001"; subsequent boots upgrade head if new revisions exist.
+alembic>=1.13,<2

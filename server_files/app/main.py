@@ -518,6 +518,16 @@ def _run_all_phase_migrations() -> None:
     except Exception as e:
         print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
 
+    # ── P1-02: Alembic bootstrap or upgrade ──
+    # First encounter: stamps the live schema (produced by legacy phases
+    # above) as the Alembic baseline — no DDL. Subsequent boots: alembic
+    # upgrade head. Already protected by the P1-01 advisory lock above.
+    try:
+        from app.db.alembic_bootstrap import alembic_bootstrap_or_upgrade
+        alembic_bootstrap_or_upgrade()
+    except Exception as e:
+        print(f"[STARTUP] Alembic bootstrap warning: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown():
