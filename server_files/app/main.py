@@ -26,10 +26,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 
 from app.database import create_tables, get_db, Business, User, SessionLocal
 from app.middleware.auth_middleware import get_current_user, require_admin
+from app.middleware.rate_limit import limiter
 from app.routers.whatsapp import router as whatsapp_router
 from app.routers.invoices import router as invoices_router
 from app.routers.auth import router as auth_router
@@ -96,6 +99,12 @@ app = FastAPI(
     description="AURORA LTS LTD (אורורה אל.טי.אס. בע\"מ) — Smart Business OS for Israeli SMBs",
     version="3.0.0-aurora",
 )
+
+# ── Rate limiting (P0-09) ──
+# limiter reads RATE_LIMIT_BACKEND: 'memory' (dev) | 'redis' (production).
+# RateLimitExceeded → 429 with Retry-After header via slowapi's built-in handler.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ─────────────────────────────────────────────────────────────

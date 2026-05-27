@@ -7,8 +7,8 @@ ENDPOINTS:
   POST /api/v1/marketing/lead
        Public endpoint. Captures a waitlist / founding-member signup
        from the marketing site. No JWT required, no cookies.
-       Rate-limited per-IP at the application layer (in-memory) until
-       Phase 4 of the security roadmap installs Redis-backed SlowAPI.
+       Rate-limited per-IP via slowapi (10/10min). Redis backend when
+       RATE_LIMIT_BACKEND=redis, in-memory for dev.
 
   GET  /api/v1/marketing/health
        Public health probe. Returns module status + lead count visibility.
@@ -17,8 +17,8 @@ SECURITY POSTURE:
   - Anonymous POST (no auth, no cookies, no JWT).
   - CORS: relies on app-wide allow_origins setting. Marketing site at
     https://aurora-ltd.co.il is the intended caller.
-  - Rate limit: 10 requests / 10 minutes / IP, in-memory. Replace with
-    SlowAPI + Redis in Phase 4 of the security roadmap.
+  - Rate limit: 10 requests / 10 minutes / IP via slowapi (P0-09).
+    Redis backend when RATE_LIMIT_BACKEND=redis; memory for dev.
   - IP hash: SHA-256(salt + raw IP) — we never store the raw IP.
   - ActionLog write on every successful capture for audit trail.
   - Email re-submission within 24h returns 200 (idempotent UX) but
@@ -37,8 +37,6 @@ import datetime
 import hashlib
 import os
 import re
-import time
-from collections import deque
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -51,6 +49,7 @@ from app.database import (
     ActionLog,
     MarketingLead,
 )
+from app.middleware.rate_limit import limiter
 
 
 # ─────────────────────────────────────────────────────────────
@@ -89,30 +88,6 @@ class LeadOut(BaseModel):
 
     class Config:
         populate_by_name = True
-
-
-# ─────────────────────────────────────────────────────────────
-# Rate limit — in-memory, per-IP. Replaced by SlowAPI+Redis in Phase 4.
-# ─────────────────────────────────────────────────────────────
-# Sliding window: max 10 hits per 600 s per IP.
-_RL_WINDOW_S = 600
-_RL_MAX_HITS = 10
-_rl_buckets: dict[str, deque[float]] = {}
-
-
-def _rate_limit_ok(ip_hash: str) -> bool:
-    now = time.monotonic()
-    bucket = _rl_buckets.get(ip_hash)
-    if bucket is None:
-        bucket = deque()
-        _rl_buckets[ip_hash] = bucket
-    # Drop expired hits
-    while bucket and (now - bucket[0]) > _RL_WINDOW_S:
-        bucket.popleft()
-    if len(bucket) >= _RL_MAX_HITS:
-        return False
-    bucket.append(now)
-    return True
 
 
 # ─────────────────────────────────────────────────────────────
@@ -178,6 +153,7 @@ def marketing_health(db: Session = Depends(get_db)) -> dict:
     response_model=LeadOut,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("10/10minutes")
 def submit_lead(
     payload: LeadIn,
     request: Request,
@@ -192,12 +168,6 @@ def submit_lead(
 
     raw_ip = _client_ip(request)
     ip_hash = _hash_ip(raw_ip)
-
-    if not _rate_limit_ok(ip_hash):
-        raise HTTPException(
-            status_code=429,
-            detail="too many requests; try again in 10 minutes",
-        )
 
     email = _normalise_email(payload.email)
     user_agent = (request.headers.get("user-agent") or "")[:500] or None

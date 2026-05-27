@@ -43,3 +43,10 @@ google-cloud-aiplatform>=1.55,<2
 # ── P0-06 — OTP delivery + phone validation ──
 # phonenumbers: E.164 normalization + Israeli number validation before dispatch
 phonenumbers>=9.0,<10
+
+# ── P0-09 — IP-level rate limiting ──
+# slowapi: FastAPI-native rate limiting, decorator-based.
+# limits: storage backends (memory for dev, Redis for production Cloud Run).
+# RATE_LIMIT_BACKEND=memory (default) | redis (requires REDIS_URL)
+slowapi>=0.1.9,<1.0
+limits>=3.6,<4

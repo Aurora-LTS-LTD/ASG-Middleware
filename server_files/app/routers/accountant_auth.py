@@ -59,6 +59,7 @@ from app.database.models import (
     ActionLog,
 )
 from app.middleware.auth_middleware import require_accountant  # noqa: F401 — re-exported for Vault router
+from app.middleware.rate_limit import limiter
 from app.services import sendgrid_client
 
 log = logging.getLogger(__name__)
@@ -430,6 +431,7 @@ def _enforce_rate_limit(db: Session, email: str, ip_hash: str) -> None:
 # ─────────────────────────────────────────────────────────────
 
 @router.post("/otp/send", response_model=OtpSendResponse)
+@limiter.limit("5/minute")
 def otp_send(
     body: OtpSendRequest,
     request: Request,
