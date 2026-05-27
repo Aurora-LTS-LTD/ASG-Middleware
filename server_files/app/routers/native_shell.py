@@ -8,21 +8,31 @@ the `X-Aurora-Native-Session` header. Sensitive endpoints can layer on the
 `require_native_shell(action)` dep (see app/middleware/auth_middleware.py)
 to gate themselves to handshake-verified Mac shell traffic only.
 
-Four endpoints — all require_admin-gated (IAP + OIDC + role):
+Four endpoints — auth differs between handshake (device-bound) and
+device-management (require_admin):
 
   POST /api/v1/admin/exec/native/handshake/start
        Issues a single-shot 60-second challenge (32 random bytes).
+       Auth: _resolve_handshake_actor — accepts an EXPIRED native_session
+       JWT (signature still valid) OR a device_id that matches a
+       non-revoked NativeDeviceKey. This breaks the chicken-and-egg
+       loop where an expired JWT was the only credential available
+       to re-bind.
 
   POST /api/v1/admin/exec/native/handshake/finish
        Verifies an ECDSA P-256 signature over the challenge, registers
        the device, mints a 15-minute native_session_token JWT.
+       Auth: same _resolve_handshake_actor as /start. The SE-signed
+       challenge is the cryptographic anchor; actor resolution merely
+       identifies whose NativeDeviceKey row to upsert.
 
   GET  /api/v1/admin/exec/native/devices
        Lists active bound devices for the calling user.
+       Auth: require_admin (IAP + OIDC + role) — needs a fresh JWT.
 
   POST /api/v1/admin/exec/native/devices/{device_pk}/revoke
        Revokes a device. Requires WebAuthn step-up
-       (`action="native_device_revoke"`).
+       (`action="native_device_revoke"`). Auth: require_admin.
 
 Security invariants enforced here:
   • Challenge is single-use (consumed_at non-null on second use)
@@ -314,6 +324,118 @@ def _resolve_native_device_id(request: Request) -> Optional[str]:
     return getattr(request.state, "native_device_id", None)
 
 
+def _resolve_handshake_actor(
+    request: Request,
+    device_id_hint: str,
+    db: Session,
+) -> User:
+    """
+    Identify the user calling /handshake/{start,finish} WITHOUT requiring
+    the bearer JWT to be unexpired.
+
+    Resolution order:
+      1. Bearer JWT path. Decode with signing key, signature verified,
+         exp ignored. This covers:
+           • Fresh native_session JWT (normal proactive refresh)
+           • EXPIRED native_session JWT (the case that was looping —
+             laptop slept, JWT TTL passed, app wakes up trying to
+             re-handshake but has no other credential to present).
+             Acceptable: signature is still a cryptographic proof that
+             we minted this token for this user. The JWT's freshness
+             is irrelevant to the handshake gate — the SE-signed
+             challenge in /finish is what binds the new session.
+           • Break-glass JWT (bootstrap; same signing key).
+
+      2. Device-bound path. If no JWT was sent OR the JWT signature
+         doesn't verify, look up NativeDeviceKey by device_id_hint.
+         If a non-revoked row exists, use its user_id. The device is
+         the durable identity; it survives JWT expiry.
+
+      3. 401 if neither.
+
+    Security note: a malicious client knowing a victim's device_id can
+    call /start under path (2) and burn challenges. That's a DoS at
+    worst, rate-limited (P0-09). /finish still requires a valid
+    SE-signature over the server-issued challenge — without the SE
+    private key (which lives in the Secure Enclave on a specific Mac),
+    no attacker can complete the handshake.
+    """
+    # ── Path 1: bearer JWT, signature-only verification ──
+    # Accept either:
+    #   • Standard Aurora-mint JWT (no iss claim — admin login token)
+    #   • Native-session JWT (iss=aurora-native-session — refresh)
+    # REJECT accountant (aurora-accountant) and step-up (aurora-step-up)
+    # tokens — wrong audience for a Mac Shell device binding.
+    _ALLOWED_ISSUERS = {None, "", JWT_ISSUER}  # JWT_ISSUER="aurora-native-session"
+
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+        try:
+            claims = jose_jwt.decode(
+                token,
+                _signing_key(),
+                algorithms=["HS256"],
+                options={
+                    "verify_exp": False,   # the whole point of this resolver
+                    "verify_iat": False,
+                    "verify_aud": False,
+                },
+            )
+            iss = claims.get("iss")
+            if iss in _ALLOWED_ISSUERS:
+                sub = claims.get("sub")
+                if sub is not None:
+                    user_id = int(sub)
+                    user = db.query(User).filter(User.id == user_id).first()
+                    if user is not None:
+                        return user
+            else:
+                log.info(
+                    "[handshake-actor] JWT iss=%s not in allowlist — trying device path",
+                    iss,
+                )
+        except Exception as exc:
+            # Sig invalid / malformed → fall through to path 2.
+            log.info(
+                "[handshake-actor] JWT path rejected (%s) — trying device path",
+                exc.__class__.__name__,
+            )
+
+    # ── Path 2: device-bound recovery ──
+    device_row = (
+        db.query(NativeDeviceKey)
+        .filter(
+            NativeDeviceKey.device_id == device_id_hint,
+            NativeDeviceKey.revoked_at.is_(None),
+        )
+        .order_by(NativeDeviceKey.enrolled_at.desc())
+        .first()
+    )
+    if device_row is not None:
+        user = db.query(User).filter(User.id == device_row.user_id).first()
+        if user is not None:
+            log.info(
+                "[handshake-actor] device-bound recovery user_id=%s device_id=%s…",
+                user.id, device_id_hint[:16],
+            )
+            return user
+
+    # ── Path 3: no identifier ──
+    raise HTTPException(
+        status_code=401,
+        detail={
+            "error": "handshake_unauthenticated",
+            "message": (
+                "Cannot identify the requesting device. Bearer JWT signature "
+                "did not verify and device_id is not bound to any active user. "
+                "First-time enrolment requires a break-glass JWT; subsequent "
+                "re-binds require the device to retain its NativeDeviceKey row."
+            ),
+        },
+    )
+
+
 # ─────────────────────────────────────────────────────────────
 # Endpoints
 # ─────────────────────────────────────────────────────────────
@@ -322,7 +444,6 @@ def _resolve_native_device_id(request: Request) -> Optional[str]:
 def handshake_start(
     body: HandshakeStartRequest,
     request: Request,
-    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> HandshakeStartResponse:
     """
@@ -332,8 +453,13 @@ def handshake_start(
     User A's challenge cannot be consumed by User B (cross-user attack).
     The `device_id_hint` is what the client CLAIMS — not trusted until
     the finish step proves it via the commitment + signature check.
+
+    Auth: _resolve_handshake_actor — accepts an expired native_session
+    JWT (signature still valid) OR a device_id bound to a NativeDeviceKey.
+    See docstring there for the security rationale.
     """
     _ = _signing_key()  # fail-fast if signing key unconfigured
+    current_user = _resolve_handshake_actor(request, body.device_id, db)
 
     challenge_bytes = secrets.token_bytes(32)
     challenge_id = str(uuid.uuid4())
@@ -375,7 +501,6 @@ def handshake_start(
 def handshake_finish(
     body: HandshakeFinishRequest,
     request: Request,
-    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> HandshakeFinishResponse:
     """
@@ -390,8 +515,13 @@ def handshake_finish(
 
     Only after ALL FIVE pass do we mark the challenge consumed, UPSERT the
     NativeDeviceKey row, and mint the session JWT.
+
+    Auth: _resolve_handshake_actor — see /handshake/start docstring.
+    The SE signature check (step 5) is the cryptographic anchor; the
+    actor resolution merely identifies WHICH user's row to upsert.
     """
     signing_key = _signing_key()
+    current_user = _resolve_handshake_actor(request, body.device_id, db)
 
     # 1-3 — challenge state
     challenge = (
