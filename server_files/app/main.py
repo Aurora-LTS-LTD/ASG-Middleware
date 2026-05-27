@@ -92,6 +92,15 @@ def _default_kyc_stub_dir() -> str:
 
 
 # ─────────────────────────────────────────────────────────────
+# STRUCTURED LOGGING (P1-08)
+# ─────────────────────────────────────────────────────────────
+# JSON logs to stderr when AURORA_RUNTIME=cloud_run, human-readable
+# text when running locally. Includes request_id from P1-07 context.
+from app.logging_config import configure_logging
+configure_logging()
+
+
+# ─────────────────────────────────────────────────────────────
 # CREATE THE APP
 # ─────────────────────────────────────────────────────────────
 app = FastAPI(
