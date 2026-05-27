@@ -3304,3 +3304,42 @@ class BankStatementEntry(Base):
         UniqueConstraint("business_id", "external_id", name="uq_bse_biz_extid"),
         Index("ix_bse_business_status_date", "business_id", "match_status", "posted_at"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-07 — INVOICE PAYMENTS (partial payment support)
+# ═══════════════════════════════════════════════════════════════
+# One InvoicePayment row per payment applied to an Invoice. The sum
+# of rows for an invoice = total paid. balance_due = amount_total - sum.
+# Auto-created when a BankStatementEntry links to an Invoice (P2-06).
+class InvoicePayment(Base):
+    __tablename__ = "invoice_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(
+        Integer, ForeignKey("invoices.id"), nullable=False, index=True,
+    )
+
+    amount = Column(Float, nullable=False)
+    currency = Column(String(3), nullable=False, default="ILS")
+    paid_at = Column(DateTime, nullable=False)
+
+    # Where did the payment come from?
+    source = Column(String(40), nullable=False, default="manual")
+    # "manual" | "bank_statement" | "payplus" | "remittance_link"
+
+    # Backreference to the bank statement entry, if reconciliation
+    # generated the row. NULL for manual entries.
+    bank_entry_id = Column(
+        Integer, ForeignKey("bank_statement_entries.id"),
+        nullable=True, index=True,
+    )
+
+    note = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("invoice_id", "bank_entry_id", name="uq_payment_invoice_bank"),
+        Index("ix_invoice_payments_invoice_id", "invoice_id"),
+    )

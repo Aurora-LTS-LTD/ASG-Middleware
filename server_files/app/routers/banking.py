@@ -213,6 +213,11 @@ def confirm_match(
     entry.match_reason = f"manually_confirmed_by_user_{current_user.id}"
     entry.matched_at = datetime.datetime.utcnow()
     db.commit()
+
+    # P2-07: manual confirmation creates the matching InvoicePayment.
+    from app.services.payments_service import apply_bank_match
+    apply_bank_match(db, bank_entry=entry, invoice=invoice)
+
     return {"id": entry.id, "match_status": "linked", "matched_invoice_id": invoice.id}
 
 

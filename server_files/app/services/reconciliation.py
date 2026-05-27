@@ -138,6 +138,15 @@ def reconcile_entry(
     entry.match_status = (
         "linked" if best_conf >= _AUTO_LINK_THRESHOLD else "suggested"
     )
+
+    # P2-07: auto-create an InvoicePayment when we auto-link.
+    # Suggested-tier (operator confirmation pending) intentionally does
+    # NOT create a payment yet — the operator's manual confirm flow
+    # will call apply_bank_match() explicitly.
+    if entry.match_status == "linked":
+        from app.services.payments_service import apply_bank_match
+        apply_bank_match(db, bank_entry=entry, invoice=best_invoice)
+
     return entry
 
 
