@@ -3214,3 +3214,43 @@ class RecurringInvoiceSchedule(Base):
             "next_due_at", "active",
         ),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-02 — FX RATES (Bank of Israel daily feed)
+# ═══════════════════════════════════════════════════════════════
+# Israeli Tax Authority requires invoice reporting in ILS even when
+# the customer is billed in a foreign currency. We cache the daily
+# Bank of Israel rate per (currency, observed_date) so that:
+#   - Conversions are deterministic + auditable (same rate used by
+#     the regulator).
+#   - We don't hit BoI's public API on every invoice render.
+#
+# Unique on (currency, observed_date) — at most one rate per day.
+class FxRate(Base):
+    __tablename__ = "fx_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # ISO-4217: "USD", "EUR", "GBP", etc.
+    currency = Column(String(3), nullable=False, index=True)
+
+    # How many ILS one unit of `currency` is worth on observed_date.
+    # e.g. currency="USD", rate_to_ils=3.65 → 1 USD = 3.65 ILS.
+    rate_to_ils = Column(Float, nullable=False)
+
+    # The date the rate was OBSERVED by BoI (typically the previous
+    # business day). NOT when we fetched it.
+    observed_date = Column(DateTime, nullable=False, index=True)
+
+    # When we ingested this row.
+    fetched_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    # Provenance — which feed did the rate come from.
+    # "boi" = bank of israel (default). Future: "manual_override".
+    source = Column(String(16), nullable=False, default="boi")
+
+    __table_args__ = (
+        UniqueConstraint("currency", "observed_date", name="uq_fx_currency_date"),
+        Index("ix_fx_currency_date", "currency", "observed_date"),
+    )
