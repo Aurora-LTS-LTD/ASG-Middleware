@@ -531,7 +531,12 @@ def handshake_finish(
     expires = now + datetime.timedelta(seconds=SESSION_JWT_TTL_SECONDS)
     payload = {
         "iss": JWT_ISSUER,
-        "sub": current_user.id,
+        # RFC 7519: `sub` MUST be a StringOrURI. python-jose's
+        # jwt.decode raises JWTClaimsError on a non-string sub, so
+        # casting to str here keeps native-session tokens compatible
+        # with the same decode path used for standard Aurora HS256
+        # tokens (see app/services/auth_service.py:create_access_token).
+        "sub": str(current_user.id),
         "device_id": body.device_id,
         "device_pk": device_row_id,
         "iat": int(now.timestamp()),
