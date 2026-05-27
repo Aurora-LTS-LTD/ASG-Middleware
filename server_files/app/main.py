@@ -202,8 +202,133 @@ async def startup():
     from app.config.secrets import validate_all_secrets
     validate_all_secrets()
 
-    create_tables()
+    # ── P1-01: serialize migrations across Cloud Run instances ──
+    # Postgres advisory lock ensures only one instance runs create_tables()
+    # + the 22 phase migrations at a time. Without this, concurrent
+    # cold-start ALTER TABLE statements deadlock on AccessExclusiveLock.
+    # SQLite path is a no-op (single-process dev).
+    from app.db.migration_lock import with_migration_lock
+    with with_migration_lock():
+        create_tables()
+        _run_all_phase_migrations()
 
+    # ── Start WhatsApp outbound-resend worker (always on) ──
+    # Safe to run even if Meta creds aren't set — the worker no-ops
+    # until is_configured() is true, then starts draining the queue.
+    try:
+        from app.services.whatsapp_resend import whatsapp_resend_loop
+        asyncio.create_task(whatsapp_resend_loop())
+        print("[STARTUP] ✅ WhatsApp resend worker started")
+    except Exception as e:
+        print(f"[STARTUP] ⚠️ WhatsApp resend worker failed to start: {e}")
+
+    # ── Seed default admin user (dev only — never runs on Cloud Run) ──
+    # Credentials are read from environment variables so they are NEVER
+    # hardcoded in source.  Set in .env for local development:
+    #
+    #   AURORA_SEED_ADMIN_EMAIL=dev-admin@aurora-lts.local
+    #   AURORA_SEED_ADMIN_PASSWORD=<generate with secrets.token_urlsafe(16)>
+    #
+    # On Cloud Run (AURORA_RUNTIME=cloud_run) this block is skipped
+    # entirely regardless of SKIP_SEED_ADMIN.  The production admin is
+    # created once via the one-shot scripts/bootstrap_admin.py job.
+    _is_cloud_run = os.getenv("AURORA_RUNTIME", "").lower() == "cloud_run"
+    _skip_seed = os.getenv("SKIP_SEED_ADMIN", "").strip() in ("1", "true", "TRUE")
+
+    if _is_cloud_run or _skip_seed:
+        print("[STARTUP] Admin seed skipped (cloud_run or SKIP_SEED_ADMIN set)")
+    else:
+        _seed_email = os.getenv("AURORA_SEED_ADMIN_EMAIL", "").strip()
+        _seed_password = os.getenv("AURORA_SEED_ADMIN_PASSWORD", "").strip()
+        if not _seed_email or not _seed_password:
+            print(
+                "[STARTUP] Admin seed skipped — set AURORA_SEED_ADMIN_EMAIL and "
+                "AURORA_SEED_ADMIN_PASSWORD in .env to auto-create a dev admin."
+            )
+        else:
+            db = SessionLocal()
+            try:
+                admin = db.query(User).filter(User.role == "admin").first()
+                if not admin:
+                    from app.services.auth_service import hash_password
+                    admin = User(
+                        email=_seed_email,
+                        password_hash=hash_password(_seed_password),
+                        full_name="Dev Admin",
+                        role="admin",
+                    )
+                    db.add(admin)
+                    db.commit()
+                    print(f"[STARTUP] Dev admin created: {_seed_email}")
+                else:
+                    print(f"[STARTUP] Admin exists: {admin.email}")
+            finally:
+                db.close()
+
+    # ── Ensure writable runtime dirs exist ──
+    # Cloud Run filesystems are read-only EXCEPT /tmp. So in cloud-run mode
+    # we point both PDF + KYC stub writes at /tmp/aurora/{pdfs,kyc_uploads}.
+    # In dev mode (default), we keep the legacy app/static/{pdfs,kyc_uploads}
+    # paths so URLs like /static/pdfs/... continue to work.
+    pdf_dir = os.getenv("PDF_STORAGE_PATH") or _default_pdf_dir()
+    kyc_dir = os.getenv("KYC_STUB_DIR") or _default_kyc_stub_dir()
+    try:
+        os.makedirs(pdf_dir, exist_ok=True)
+        print(f"[STARTUP] PDF output dir ready: {pdf_dir}")
+    except OSError as e:
+        # Non-fatal — PDFs may regenerate on demand. Log + continue.
+        print(f"[STARTUP] ⚠️ PDF dir not writable ({pdf_dir}): {e}")
+    try:
+        os.makedirs(kyc_dir, exist_ok=True)
+        print(f"[STARTUP] KYC stub upload dir ready: {kyc_dir}")
+    except OSError as e:
+        print(f"[STARTUP] ⚠️ KYC stub dir not writable ({kyc_dir}): {e}")
+
+    # ── Initialize Telegram Bot (if token is configured) ──
+    # The bot runs as part of this FastAPI process — no separate process needed.
+    # Updates arrive via the POST /webhook/telegram/{secret} endpoint.
+    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if telegram_token:
+        try:
+            from app.services.telegram_bot import (
+                init_application,
+                morning_digest_loop,
+            )
+            from app.services.allocation_queue import allocation_retry_loop
+
+            tg_app = await init_application(telegram_token)
+            bot = tg_app.bot
+
+            # ── Start background workers as fire-and-forget asyncio tasks ──
+            # These tasks run concurrently with FastAPI's event loop.
+            asyncio.create_task(allocation_retry_loop(bot=bot))
+            asyncio.create_task(morning_digest_loop(bot=bot))
+
+            print("[STARTUP] ✅ Telegram bot initialized")
+            print("[STARTUP] ✅ Allocation retry worker started")
+            print("[STARTUP] ✅ Morning digest worker started")
+            print("[STARTUP] ℹ️  Register webhook: POST /api/v1/telegram/setup-webhook")
+        except Exception as e:
+            print(f"[STARTUP] ⚠️ Telegram bot failed to start (non-fatal): {e}")
+            print("[STARTUP] Set TELEGRAM_BOT_TOKEN in .env to enable the bot")
+    else:
+        print("[STARTUP] ⚠️ TELEGRAM_BOT_TOKEN not set — Telegram bot disabled")
+        print("[STARTUP] Add TELEGRAM_BOT_TOKEN=your-token to .env to enable")
+
+    print("[STARTUP] Server is ready!")
+    print(f"[STARTUP] Dashboard: http://0.0.0.0:8000/dashboard")
+    print("=" * 50)
+
+
+def _run_all_phase_migrations() -> None:
+    """
+    Run all 22 hand-rolled phase migrations in sequence.
+
+    Extracted from the startup() body so the caller can wrap the entire
+    sequence in a single advisory-lock context. Idempotency of each
+    individual phase is unchanged (each migrate_phaseN file already uses
+    `ADD COLUMN IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`).
+    """
     # ── Run Phase 4 DB migrations (adds new columns safely) ──
     try:
         from app.migrate_phase4 import run_phase4_migrations
@@ -392,113 +517,6 @@ async def startup():
         run_phase21_vault_migrations()
     except Exception as e:
         print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
-
-    # ── Start WhatsApp outbound-resend worker (always on) ──
-    # Safe to run even if Meta creds aren't set — the worker no-ops
-    # until is_configured() is true, then starts draining the queue.
-    try:
-        from app.services.whatsapp_resend import whatsapp_resend_loop
-        asyncio.create_task(whatsapp_resend_loop())
-        print("[STARTUP] ✅ WhatsApp resend worker started")
-    except Exception as e:
-        print(f"[STARTUP] ⚠️ WhatsApp resend worker failed to start: {e}")
-
-    # ── Seed default admin user (dev only — never runs on Cloud Run) ──
-    # Credentials are read from environment variables so they are NEVER
-    # hardcoded in source.  Set in .env for local development:
-    #
-    #   AURORA_SEED_ADMIN_EMAIL=dev-admin@aurora-lts.local
-    #   AURORA_SEED_ADMIN_PASSWORD=<generate with secrets.token_urlsafe(16)>
-    #
-    # On Cloud Run (AURORA_RUNTIME=cloud_run) this block is skipped
-    # entirely regardless of SKIP_SEED_ADMIN.  The production admin is
-    # created once via the one-shot scripts/bootstrap_admin.py job.
-    _is_cloud_run = os.getenv("AURORA_RUNTIME", "").lower() == "cloud_run"
-    _skip_seed = os.getenv("SKIP_SEED_ADMIN", "").strip() in ("1", "true", "TRUE")
-
-    if _is_cloud_run or _skip_seed:
-        print("[STARTUP] Admin seed skipped (cloud_run or SKIP_SEED_ADMIN set)")
-    else:
-        _seed_email = os.getenv("AURORA_SEED_ADMIN_EMAIL", "").strip()
-        _seed_password = os.getenv("AURORA_SEED_ADMIN_PASSWORD", "").strip()
-        if not _seed_email or not _seed_password:
-            print(
-                "[STARTUP] Admin seed skipped — set AURORA_SEED_ADMIN_EMAIL and "
-                "AURORA_SEED_ADMIN_PASSWORD in .env to auto-create a dev admin."
-            )
-        else:
-            db = SessionLocal()
-            try:
-                admin = db.query(User).filter(User.role == "admin").first()
-                if not admin:
-                    from app.services.auth_service import hash_password
-                    admin = User(
-                        email=_seed_email,
-                        password_hash=hash_password(_seed_password),
-                        full_name="Dev Admin",
-                        role="admin",
-                    )
-                    db.add(admin)
-                    db.commit()
-                    print(f"[STARTUP] Dev admin created: {_seed_email}")
-                else:
-                    print(f"[STARTUP] Admin exists: {admin.email}")
-            finally:
-                db.close()
-
-    # ── Ensure writable runtime dirs exist ──
-    # Cloud Run filesystems are read-only EXCEPT /tmp. So in cloud-run mode
-    # we point both PDF + KYC stub writes at /tmp/aurora/{pdfs,kyc_uploads}.
-    # In dev mode (default), we keep the legacy app/static/{pdfs,kyc_uploads}
-    # paths so URLs like /static/pdfs/... continue to work.
-    pdf_dir = os.getenv("PDF_STORAGE_PATH") or _default_pdf_dir()
-    kyc_dir = os.getenv("KYC_STUB_DIR") or _default_kyc_stub_dir()
-    try:
-        os.makedirs(pdf_dir, exist_ok=True)
-        print(f"[STARTUP] PDF output dir ready: {pdf_dir}")
-    except OSError as e:
-        # Non-fatal — PDFs may regenerate on demand. Log + continue.
-        print(f"[STARTUP] ⚠️ PDF dir not writable ({pdf_dir}): {e}")
-    try:
-        os.makedirs(kyc_dir, exist_ok=True)
-        print(f"[STARTUP] KYC stub upload dir ready: {kyc_dir}")
-    except OSError as e:
-        print(f"[STARTUP] ⚠️ KYC stub dir not writable ({kyc_dir}): {e}")
-
-    # ── Initialize Telegram Bot (if token is configured) ──
-    # The bot runs as part of this FastAPI process — no separate process needed.
-    # Updates arrive via the POST /webhook/telegram/{secret} endpoint.
-    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    if telegram_token:
-        try:
-            from app.services.telegram_bot import (
-                init_application,
-                morning_digest_loop,
-            )
-            from app.services.allocation_queue import allocation_retry_loop
-
-            tg_app = await init_application(telegram_token)
-            bot = tg_app.bot
-
-            # ── Start background workers as fire-and-forget asyncio tasks ──
-            # These tasks run concurrently with FastAPI's event loop.
-            asyncio.create_task(allocation_retry_loop(bot=bot))
-            asyncio.create_task(morning_digest_loop(bot=bot))
-
-            print("[STARTUP] ✅ Telegram bot initialized")
-            print("[STARTUP] ✅ Allocation retry worker started")
-            print("[STARTUP] ✅ Morning digest worker started")
-            print("[STARTUP] ℹ️  Register webhook: POST /api/v1/telegram/setup-webhook")
-        except Exception as e:
-            print(f"[STARTUP] ⚠️ Telegram bot failed to start (non-fatal): {e}")
-            print("[STARTUP] Set TELEGRAM_BOT_TOKEN in .env to enable the bot")
-    else:
-        print("[STARTUP] ⚠️ TELEGRAM_BOT_TOKEN not set — Telegram bot disabled")
-        print("[STARTUP] Add TELEGRAM_BOT_TOKEN=your-token to .env to enable")
-
-    print("[STARTUP] Server is ready!")
-    print(f"[STARTUP] Dashboard: http://0.0.0.0:8000/dashboard")
-    print("=" * 50)
 
 
 @app.on_event("shutdown")
