@@ -226,6 +226,13 @@ async def startup():
     from app.config.secrets import validate_all_secrets
     validate_all_secrets()
 
+    # ── P1-09/10/11: refuse to boot Cloud Run with stub backends ──
+    # ITA / STORAGE / AUDIT_BIGQUERY backends silently no-op when stub.
+    # In production that means fake invoice allocations, dropped GCS
+    # writes, and discarded audit events — invisible to operators.
+    from app.config.backend_check import validate_backend_selectors
+    validate_backend_selectors()
+
     # ── P1-01: serialize migrations across Cloud Run instances ──
     # Postgres advisory lock ensures only one instance runs create_tables()
     # + the 22 phase migrations at a time. Without this, concurrent
