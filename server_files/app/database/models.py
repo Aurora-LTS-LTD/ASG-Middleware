@@ -156,6 +156,18 @@ class Invoice(Base):
     status = Column(String, default="draft")         # draft/finalized/sent/cancelled
     description = Column(String, nullable=True)      # Optional note
 
+    # ── P2-05: Credit note discriminator ──
+    # kind="standard"     → a normal invoice (default).
+    # kind="credit_note"  → a חשבונית זיכוי that REFERENCES the original
+    #                        invoice via original_invoice_id. Its
+    #                        amount_net/vat/total are NEGATIVE, so the
+    #                        existing VAT report + ITA allocation flow
+    #                        already nets them out without special-casing.
+    kind = Column(String(16), default="standard", nullable=False, index=True)
+    original_invoice_id = Column(
+        Integer, ForeignKey("invoices.id"), nullable=True, index=True,
+    )
+
     # ── Appendix I Sprint 2 — 7-year compliance archive ──
     # Path inside gs://aurora-pdfs-prod/ (e.g., "invoices/2026/05/INV-00042.pdf").
     # Separate from `pdf_url` (which may be a temporary signed URL or empty).
