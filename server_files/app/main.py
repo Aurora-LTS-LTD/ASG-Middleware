@@ -62,6 +62,7 @@ from app.routers.invoice_payments import router as invoice_payments_router      
 from app.routers.aml import router as aml_router                                    # P2-08 — AML / sanctions screening
 from app.routers.anomaly import router as anomaly_router                            # P2-20 — predictive anomaly detection
 from app.routers.vat_filing import router as vat_filing_router                      # P2-22 — VAT return filing automation
+from app.routers.payment_links import router as payment_links_router                # P2-23 — payment links
 
 
 # ─────────────────────────────────────────────────────────────
@@ -218,6 +219,7 @@ app.include_router(invoice_payments_router)      # P2-07 — partial payments
 app.include_router(aml_router)                   # P2-08 — AML / sanctions screening
 app.include_router(anomaly_router)               # P2-20 — predictive anomaly detection
 app.include_router(vat_filing_router)            # P2-22 — VAT return filing
+app.include_router(payment_links_router)         # P2-23 — payment links + PayPlus checkout
 
 
 # ─────────────────────────────────────────────────────────────
@@ -570,6 +572,13 @@ def _run_all_phase_migrations() -> None:
         run_phase21_vault_migrations()
     except Exception as e:
         print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
+
+    # ── P2-23: Payment links table ──
+    try:
+        from app.migrations.migrate_phase25_payment_links import run as run_phase25
+        run_phase25()
+    except Exception as e:
+        print(f"[STARTUP] Phase 25 Payment links migration warning: {e}")
 
     # ── P2-22: VAT returns table ──
     try:

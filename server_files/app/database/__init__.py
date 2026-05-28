@@ -89,4 +89,6 @@ from app.database.models import (
     AnomalyEvent,
     # P2-22 — VAT Return Filing (Phase 24)
     VatReturn,
+    # P2-23 — Payment Links (Phase 25)
+    PaymentLink,
 )

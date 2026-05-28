@@ -3482,3 +3482,36 @@ class VatReturn(Base):
         ),
         Index("ix_vat_returns_due_date", "due_date"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-23 — Payment Links
+# ═══════════════════════════════════════════════════════════════
+class PaymentLink(Base):
+    __tablename__ = "payment_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+
+    # Cryptographic material
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    nonce = Column(String(32), nullable=False)
+
+    # Financial metadata (denormalised for fast checkout rendering)
+    amount_ils = Column(Float, nullable=False)
+    currency = Column(String(3), nullable=False, default="ILS")
+
+    # Lifecycle: open → paid | expired | cancelled | failed
+    status = Column(String(16), nullable=False, default="open", index=True)
+
+    expires_at = Column(DateTime, nullable=False)
+    paid_at = Column(DateTime, nullable=True)
+    payplus_transaction_id = Column(String(128), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (
+        Index("ix_payment_links_invoice_status", "invoice_id", "status"),
+    )
