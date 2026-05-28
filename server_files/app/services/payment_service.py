@@ -151,6 +151,20 @@ def record_payment(
         f"status: {invoice.payment_status}, remaining: {new_remaining:.2f}"
     )
 
+    # P2-25: fire push notification on full payment
+    if invoice.payment_status == "paid":
+        try:
+            from app.services.realtime.push_notifications import send_push_to_users, EVENTS
+            event = EVENTS["invoice_paid"]
+            event.data = {
+                "invoice_id": invoice.id,
+                "amount": amount,
+                "invoice_number": getattr(invoice, "invoice_number", ""),
+            }
+            send_push_to_users("invoice_paid", [invoice.business_id])
+        except Exception:
+            pass  # push is non-blocking
+
     return {
         "payment_id": payment.id,
         "invoice_id": invoice.id,

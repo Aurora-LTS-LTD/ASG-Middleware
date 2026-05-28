@@ -63,6 +63,7 @@ from app.routers.aml import router as aml_router                                
 from app.routers.anomaly import router as anomaly_router                            # P2-20 — predictive anomaly detection
 from app.routers.vat_filing import router as vat_filing_router                      # P2-22 — VAT return filing automation
 from app.routers.payment_links import router as payment_links_router                # P2-23 — payment links
+from app.routers.realtime import router as realtime_router                          # P2-25 — SSE stream + APNs push
 
 
 # ─────────────────────────────────────────────────────────────
@@ -220,6 +221,7 @@ app.include_router(aml_router)                   # P2-08 — AML / sanctions scr
 app.include_router(anomaly_router)               # P2-20 — predictive anomaly detection
 app.include_router(vat_filing_router)            # P2-22 — VAT return filing
 app.include_router(payment_links_router)         # P2-23 — payment links + PayPlus checkout
+app.include_router(realtime_router)              # P2-25 — SSE stream + APNs push notifications
 
 
 # ─────────────────────────────────────────────────────────────
@@ -572,6 +574,13 @@ def _run_all_phase_migrations() -> None:
         run_phase21_vault_migrations()
     except Exception as e:
         print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
+
+    # ── P2-25: APNs device token columns ──
+    try:
+        from app.migrations.migrate_phase26_apns_tokens import run as run_phase26
+        run_phase26()
+    except Exception as e:
+        print(f"[STARTUP] Phase 26 APNs migration warning: {e}")
 
     # ── P2-23: Payment links table ──
     try:
