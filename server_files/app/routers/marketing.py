@@ -269,6 +269,14 @@ def submit_lead(
     except Exception:
         db.rollback()
 
+    # P2-24: enrol in email nurture sequence (non-blocking; fails silently)
+    try:
+        from app.services.lead_nurture import enrol_lead
+        enrol_lead(lead, db)
+    except Exception as _nurture_err:
+        import logging as _log
+        _log.getLogger(__name__).warning("nurture enrolment failed: %s", _nurture_err)
+
     return LeadOut(
         ok=True,
         id=lead.id,

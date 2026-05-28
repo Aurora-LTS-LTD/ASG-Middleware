@@ -1557,6 +1557,11 @@ class MarketingLead(Base):
         onupdate=datetime.datetime.utcnow,
     )
 
+    # P2-24 — Email nurture sequence tracking
+    nurture_enrolled_at = Column(DateTime, nullable=True)    # when lead entered sequence
+    nurture_last_step = Column(Integer, nullable=True)        # last step sent (1-5)
+    nurture_unsubscribed_at = Column(DateTime, nullable=True) # unsubscribe timestamp
+
 
 # ═══════════════════════════════════════════════════════════════
 # MODEL 29: TaxObligation   (v2.0 — Virtual Tax Shield)

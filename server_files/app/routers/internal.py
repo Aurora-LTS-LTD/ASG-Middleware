@@ -512,3 +512,21 @@ async def eod_brief_endpoint(
 
     print(f"[EOD_BRIEF] sent → {ceo_phone} ok={result.get('ok')} wamid={result.get('wamid')}")
     return {"ok": True, "to": ceo_phone, "wamid": result.get("wamid"), "send_ok": result.get("ok")}
+
+
+# ─────────────────────────────────────────────────────────────
+# P2-24 — POST /api/v1/internal/nurture-tick
+# ─────────────────────────────────────────────────────────────
+@router.post("/nurture-tick", summary="Run daily lead nurture sequence tick")
+async def nurture_tick(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Called by Cloud Scheduler daily.
+    Sends the next email in the nurture sequence for each enrolled lead.
+    """
+    _require_internal(request)
+    from app.services.lead_nurture import run_nurture_tick
+    result = run_nurture_tick(db)
+    return {"ok": True, **result}
