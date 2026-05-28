@@ -82,4 +82,7 @@ from app.database.models import (
     # Sprint 8.3 — Document Vault DB Layer (Phase 21 vault)
     ClientDocument,
     VaultIngestionAddress,
+    # P2-08 — AML / Sanctions Screening (Phase 22)
+    SanctionsListEntry,
+    SanctionsScreeningHit,
 )

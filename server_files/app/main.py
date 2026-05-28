@@ -59,6 +59,7 @@ from app.routers.autonomous_agents import router as autonomous_agents_router    
 from app.routers.credit_notes import router as credit_notes_router                  # P2-05 — credit notes (חשבונית זיכוי)
 from app.routers.banking import router as banking_router                            # P2-06 — payment reconciliation
 from app.routers.invoice_payments import router as invoice_payments_router          # P2-07 — partial payment recording
+from app.routers.aml import router as aml_router                                    # P2-08 — AML / sanctions screening
 
 
 # ─────────────────────────────────────────────────────────────
@@ -212,6 +213,7 @@ app.include_router(autonomous_agents_router)     # P2-04 — agent dispatch
 app.include_router(credit_notes_router)          # P2-05 — credit notes
 app.include_router(banking_router)               # P2-06 — payment reconciliation
 app.include_router(invoice_payments_router)      # P2-07 — partial payments
+app.include_router(aml_router)                   # P2-08 — AML / sanctions screening
 
 
 # ─────────────────────────────────────────────────────────────
@@ -564,6 +566,15 @@ def _run_all_phase_migrations() -> None:
         run_phase21_vault_migrations()
     except Exception as e:
         print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
+
+    # ── P2-08: AML / Sanctions tables ──
+    # Provisions sanctions_list_entries + sanctions_screening_hits.
+    # Idempotent; safe on every boot.
+    try:
+        from app.migrations.migrate_phase22_sanctions import run as run_phase22
+        run_phase22()
+    except Exception as e:
+        print(f"[STARTUP] Phase 22 Sanctions migration warning: {e}")
 
     # ── P1-02: Alembic bootstrap or upgrade ──
     # First encounter: stamps the live schema (produced by legacy phases
