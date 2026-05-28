@@ -85,4 +85,6 @@ from app.database.models import (
     # P2-08 — AML / Sanctions Screening (Phase 22)
     SanctionsListEntry,
     SanctionsScreeningHit,
+    # P2-20 — Predictive Anomaly Detection (Phase 23)
+    AnomalyEvent,
 )

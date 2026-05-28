@@ -60,6 +60,7 @@ from app.routers.credit_notes import router as credit_notes_router              
 from app.routers.banking import router as banking_router                            # P2-06 — payment reconciliation
 from app.routers.invoice_payments import router as invoice_payments_router          # P2-07 — partial payment recording
 from app.routers.aml import router as aml_router                                    # P2-08 — AML / sanctions screening
+from app.routers.anomaly import router as anomaly_router                            # P2-20 — predictive anomaly detection
 
 
 # ─────────────────────────────────────────────────────────────
@@ -214,6 +215,7 @@ app.include_router(credit_notes_router)          # P2-05 — credit notes
 app.include_router(banking_router)               # P2-06 — payment reconciliation
 app.include_router(invoice_payments_router)      # P2-07 — partial payments
 app.include_router(aml_router)                   # P2-08 — AML / sanctions screening
+app.include_router(anomaly_router)               # P2-20 — predictive anomaly detection
 
 
 # ─────────────────────────────────────────────────────────────
@@ -566,6 +568,13 @@ def _run_all_phase_migrations() -> None:
         run_phase21_vault_migrations()
     except Exception as e:
         print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
+
+    # ── P2-20: Anomaly detection events table ──
+    try:
+        from app.migrations.migrate_phase23_anomaly import run as run_phase23
+        run_phase23()
+    except Exception as e:
+        print(f"[STARTUP] Phase 23 Anomaly migration warning: {e}")
 
     # ── P2-08: AML / Sanctions tables ──
     # Provisions sanctions_list_entries + sanctions_screening_hits.

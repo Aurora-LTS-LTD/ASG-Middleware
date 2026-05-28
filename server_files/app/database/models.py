@@ -3401,3 +3401,34 @@ class SanctionsScreeningHit(Base):
     reviewed_at = Column(DateTime, nullable=True)
     reviewed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     review_note = Column(String(500), nullable=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-20 — Predictive Anomaly Detection events
+# ═══════════════════════════════════════════════════════════════
+class AnomalyEvent(Base):
+    __tablename__ = "anomaly_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
+
+    signal_type = Column(String(48), nullable=False, index=True)
+    # "low" | "medium" | "high" | "critical"
+    severity = Column(String(16), nullable=False, index=True)
+    score = Column(Float, nullable=False)
+    description = Column(String(1000), nullable=False)
+    metadata_json = Column(String, nullable=True)   # serialised dict
+
+    # Lifecycle: "open" → "acknowledged" | "false_positive" | "escalated"
+    status = Column(String(24), nullable=False, default="open", index=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolution_note = Column(String(500), nullable=True)
+
+    __table_args__ = (
+        Index("ix_anomaly_events_business_signal", "business_id", "signal_type"),
+        Index("ix_anomaly_events_created_at", "created_at"),
+    )
