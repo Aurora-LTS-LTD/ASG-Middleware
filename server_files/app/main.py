@@ -61,6 +61,7 @@ from app.routers.banking import router as banking_router                        
 from app.routers.invoice_payments import router as invoice_payments_router          # P2-07 — partial payment recording
 from app.routers.aml import router as aml_router                                    # P2-08 — AML / sanctions screening
 from app.routers.anomaly import router as anomaly_router                            # P2-20 — predictive anomaly detection
+from app.routers.vat_filing import router as vat_filing_router                      # P2-22 — VAT return filing automation
 
 
 # ─────────────────────────────────────────────────────────────
@@ -216,6 +217,7 @@ app.include_router(banking_router)               # P2-06 — payment reconciliat
 app.include_router(invoice_payments_router)      # P2-07 — partial payments
 app.include_router(aml_router)                   # P2-08 — AML / sanctions screening
 app.include_router(anomaly_router)               # P2-20 — predictive anomaly detection
+app.include_router(vat_filing_router)            # P2-22 — VAT return filing
 
 
 # ─────────────────────────────────────────────────────────────
@@ -568,6 +570,13 @@ def _run_all_phase_migrations() -> None:
         run_phase21_vault_migrations()
     except Exception as e:
         print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
+
+    # ── P2-22: VAT returns table ──
+    try:
+        from app.migrations.migrate_phase24_vat_returns import run as run_phase24
+        run_phase24()
+    except Exception as e:
+        print(f"[STARTUP] Phase 24 VAT returns migration warning: {e}")
 
     # ── P2-20: Anomaly detection events table ──
     try:

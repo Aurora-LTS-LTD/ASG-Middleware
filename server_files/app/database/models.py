@@ -3432,3 +3432,53 @@ class AnomalyEvent(Base):
         Index("ix_anomaly_events_business_signal", "business_id", "signal_type"),
         Index("ix_anomaly_events_created_at", "created_at"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-22 — VAT Return Filing
+# ═══════════════════════════════════════════════════════════════
+class VatReturn(Base):
+    __tablename__ = "vat_returns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+    tax_id = Column(String(20), nullable=True)
+
+    # Period identification
+    period_year = Column(Integer, nullable=False)
+    period_number = Column(Integer, nullable=False)        # 1–6 (bi-monthly) or 1–4 (quarterly)
+    period_frequency = Column(String(16), nullable=False)  # "bimonthly" | "quarterly"
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    due_date = Column(Date, nullable=False)
+
+    # Sales (outputs)
+    taxable_sales_ils = Column(Float, nullable=False, default=0.0)
+    vat_collected_ils = Column(Float, nullable=False, default=0.0)
+    exempt_sales_ils = Column(Float, nullable=False, default=0.0)
+    invoice_count = Column(Integer, nullable=False, default=0)
+
+    # Purchases (inputs)
+    taxable_purchases_ils = Column(Float, nullable=False, default=0.0)
+    input_vat_ils = Column(Float, nullable=False, default=0.0)
+    expense_count = Column(Integer, nullable=False, default=0)
+
+    # Net
+    net_vat_payable_ils = Column(Float, nullable=False, default=0.0)
+
+    # Lifecycle: draft → submitted | rejected
+    status = Column(String(16), nullable=False, default="draft", index=True)
+    confirmation_number = Column(String(64), nullable=True)
+    rejection_reason = Column(String(500), nullable=True)
+
+    submitted_at = Column(DateTime, nullable=True)
+    submitted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "business_id", "period_year", "period_number", "period_frequency",
+            name="uq_vat_return_period",
+        ),
+        Index("ix_vat_returns_due_date", "due_date"),
+    )

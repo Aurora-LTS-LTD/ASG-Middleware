@@ -87,4 +87,6 @@ from app.database.models import (
     SanctionsScreeningHit,
     # P2-20 — Predictive Anomaly Detection (Phase 23)
     AnomalyEvent,
+    # P2-22 — VAT Return Filing (Phase 24)
+    VatReturn,
 )
