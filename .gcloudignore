@@ -16,6 +16,22 @@ env/
 **/venv/
 **/.venv/
 
+# Node modules — the API image only builds from server_files/ (Dockerfile);
+# the accountant-portal JS deps must never bloat the API build context.
+node_modules/
+**/node_modules/
+
+# The accountant-portal is a SEPARATE app (Tauri+Next, own git repo). The
+# aurora-api Dockerfile only copies server_files/ — the portal's 1.8 GB Rust
+# target/ + Next build output have no business in the API build context.
+accountant-portal/
+
+# Build outputs (Rust / Next / generic) — never needed by the API image.
+**/target/
+**/.next/
+**/dist/
+**/build/
+
 # Local databases + uploads
 *.db
 *.db-journal
