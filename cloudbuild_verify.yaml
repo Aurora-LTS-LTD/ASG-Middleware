@@ -1,0 +1,32 @@
+# Build + IMPORT-GATE + push. No deploy, no migrations.
+# The import step reproduces the gunicorn worker boot (import app.main, which
+# pulls in every router) inside the built image. If any dependency is missing
+# from requirements.lock, this step fails and the image is NEVER pushed.
+substitutions:
+  _IMG: me-west1-docker.pkg.dev/aurora-lts-prod/aurora/api:v1.14.3
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: ["build", "--tag=${_IMG}", "."]
+  - id: import-gate
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build]
+    args:
+      - run
+      - --rm
+      - --env=AURORA_RUNTIME=          # dev mode: skip prod secret validation
+      - --env=DATABASE_URL=sqlite:///./verify.db
+      - ${_IMG}
+      - python
+      - -c
+      - "import app.main; print('IMPORT-GATE OK: app.main + all routers imported')"
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    waitFor: [import-gate]
+    args: ["push", "${_IMG}"]
+images:
+  - ${_IMG}
+timeout: 900s
