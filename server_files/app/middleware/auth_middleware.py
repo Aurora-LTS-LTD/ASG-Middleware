@@ -774,9 +774,18 @@ def _resolve_native_session(request: Request, db: Session) -> "dict | None":
         return None
 
     device_id = claims.get("device_id")
-    user_id = claims.get("sub")
-    if not device_id or not user_id:
+    sub_raw = claims.get("sub")
+    if not device_id or not sub_raw:
         log.warning("[_resolve_native_session] JWT missing device_id or sub")
+        request.state.native_session_verified = False
+        return None
+
+    # `sub` is minted as a string for RFC 7519 / python-jose compliance, but
+    # NativeDeviceKey.user_id is INTEGER. Postgres rejects int=varchar; cast here.
+    try:
+        user_id = int(sub_raw)
+    except (TypeError, ValueError):
+        log.warning("[_resolve_native_session] sub claim not an integer: %r", sub_raw)
         request.state.native_session_verified = False
         return None
 
