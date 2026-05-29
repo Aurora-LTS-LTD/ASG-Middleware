@@ -108,3 +108,13 @@ python-telegram-bot==22.7
 
 # ── Misc utilities ──
 python-dotenv==1.2.2
+
+# ── Rate limiting (P0-09 — slowapi + transitive deps) ──
+# main.py imports slowapi at module load; it was in requirements.txt but
+# never made it into the lock, so fresh image builds crashed every worker
+# on `ModuleNotFoundError: No module named 'slowapi'`. Pinned to the
+# versions in the working dev venv (Python 3.14.4).
+slowapi==0.1.9
+limits==3.14.1
+Deprecated==1.3.1
+wrapt==2.2.1
