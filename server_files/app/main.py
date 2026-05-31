@@ -45,8 +45,9 @@ from app.routers.admin_compliance import router as admin_compliance_router  # Sp
 from app.routers.marketing import router as marketing_router                 # Sprint 7 — Marketing capture (aurora-ltd.co.il)
 from app.routers.admin_break_glass import router as admin_break_glass_router # Track 3 — Break-glass JWT lifecycle (IAP-only)
 from app.routers.admin_users import router as admin_users_router             # Track 4 — Admin users + orgs list (feeds aurora-admin-ui)
-from app.routers.admin_exec import router as admin_exec_router               # Appendix H — Tier 1 CEO Executive Dashboard backend
-from app.routers.native_shell import router as native_shell_router           # Sprint 8.2 — Aurora Mac Shell hardware binding (Phase 20)
+# MOVED to aurora-api-core (app.main_core) as part of the operational-core split:
+#   • admin_exec   — CEO Executive Dashboard + embedded Gemini Copilot
+#   • native_shell — Aurora Mac Shell hardware-binding handshake
 from app.routers.accountant_auth import router as accountant_auth_router    # Sprint 8.2 sibling — Accountant Portal auth (Phase 21)
 
 
@@ -155,8 +156,7 @@ app.include_router(admin_compliance_router) # Sprint 6 — DSAR + audit + payout
 app.include_router(marketing_router)         # Sprint 7 — POST /api/v1/marketing/lead (public, anonymous)
 app.include_router(admin_break_glass_router) # Track 3 — list + revoke break-glass tokens (IAP-strict)
 app.include_router(admin_users_router)       # Track 4 — admin users + orgs list (consumed by aurora-admin-ui)
-app.include_router(admin_exec_router)        # Appendix H — Tier 1 CEO Executive Dashboard endpoints
-app.include_router(native_shell_router)      # Sprint 8.2 — Aurora Mac Shell handshake + device list/revoke
+# admin_exec_router + native_shell_router moved to aurora-api-core (app.main_core)
 app.include_router(accountant_auth_router)   # Sprint 8.2 sibling — Accountant Portal OTP + device mgmt
 
 
