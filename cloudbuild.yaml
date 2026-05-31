@@ -33,11 +33,12 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  # ── 1. Build the image (multi-stage Dockerfile in repo root) ──
+  # ── 1. Build the M1 image (per-service Dockerfile; context = repo root) ──
   - id: docker-build
     name: gcr.io/cloud-builders/docker
     args:
       - build
+      - --file=services/aurora-main-api/Dockerfile
       - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
       - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
       - --label=git.commit=${COMMIT_SHA}

@@ -31,7 +31,7 @@ steps:
     name: gcr.io/cloud-builders/docker
     args:
       - build
-      - --file=Dockerfile.core
+      - --file=services/aurora-api-core/Dockerfile
       - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
       - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
       - --label=git.commit=${COMMIT_SHA}

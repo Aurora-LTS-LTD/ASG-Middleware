@@ -109,3 +109,29 @@ vat_coach,exec_aggregator,allocation_queue,smart_reminders,…}` · **`services.
 
 _Caveat: AST analysis can't see importlib/string imports; the `autonomous`/`tax_engine` dead-or-dynamic
 question was the targeted exception, verified by a dedicated reference sweep._
+
+---
+
+## Execution log
+- **Phase 1** ✅ — desktop bundle + stale root HTML → `legacy/desktop/`.
+- **Phase 1b** ✅ — dead `tax_engine` + its test → `legacy/desktop/`.
+- **Phase 2A** ✅ — `front-end/{ceo-dashboard, accountant-portal}`; M1 serves UI via `CEO_DASHBOARD_DIR`; copilot↔M1 ghost edge severed.
+- **Phase 2B step 1** ✅ — shared core → `shared_packages/aurora_shared` (96-file import rewrite).
+- **Phase 2B step 2** ✅ — `app` split → `services/aurora-main-api/app` (M1) + `services/aurora-api-core/app` (M2); `anthropic_provider` archived (dead + straddling).
+- **Phase 4** ✅ — per-service Dockerfiles (`services/<svc>/Dockerfile`, context = repo root, bundle `aurora_shared` wheel; M1 bundles `front-end/ceo-dashboard` + sets `CEO_DASHBOARD_DIR`); `cloudbuild{,.core,_verify}.yaml` repointed; old root Dockerfiles removed; `server_files/{tests,scripts}` re-homed to M1.
+- **Phase 5** ⏳ — production build + canary deploy (human-triggered).
+
+### Local dev / CI
+- `pip install -e shared_packages/aurora_shared` once, then run each service from its dir
+  (`cd services/aurora-main-api && uvicorn app.main:app` / `aurora-api-core && uvicorn app.main_core:app`).
+- `requirements.lock` is unchanged (full set, both images); `aurora_shared` is installed from a
+  locally-built wheel inside each Dockerfile. Slimming M2's deps is a tracked follow-up.
+
+### Phase 5 — build + canary deploy commands (run from repo root)
+```bash
+# M2 first (no real users), then M1 — each: build, then deploy --no-traffic, verify on tagged URL, shift traffic.
+gcloud builds submit --config cloudbuild.core.yaml --substitutions=_VERSION=v0.2.0 --project aurora-lts-prod .
+gcloud builds submit --config cloudbuild.yaml      --substitutions=_VERSION=v0.2.0 --project aurora-lts-prod .
+# deploy: reuse the Phase-5 gcloud run deploy blueprints (aurora-api-core / aurora-api),
+# --no-traffic --tag candidate, verify /api/v1/core/health resp. /api/v1/onboarding/health, then update-traffic.
+```
