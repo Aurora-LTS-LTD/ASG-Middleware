@@ -73,3 +73,39 @@ Front-end has no Cloud Run backend impact.
 
 ## Sequence
 Phase 1 → 2A → 2B → 3 → 4 → 5; one commit per phase; gated by the validations above.
+
+---
+
+## Step 2.1 — Confirmed dependency manifest (AST import-graph over `server_files/app`)
+134 modules · M1 closure 112 · M2 closure 24 · SHARED (∩) 15. Includes lazy/in-function imports.
+Verified the two surprising findings (see below) before recording.
+
+**SHARED → `shared_packages/aurora_shared/` (15)**
+`database` (+`connection`,`models`) · `middleware.auth_middleware` · `schemas.category_dto` ·
+`services.auth_oidc` · `services.auth_service` · `services.exec_events` · `services.webauthn_service` ·
+`services.whatsapp_identity` · `services.identity` (+`invitation_service`,`organization_service`,`pairing`,`tax_id`)
+
+**M2-only → `services/aurora-api-core/` (9)**
+`main_core` · `routers.copilot` · `routers.native_shell` · `services.copilot.{executor,guardrails,pricing_meta}` ·
+`services.copilot.{anthropic_client,prompts,tools}` (M2-only once `llm/anthropic_provider.py` is severed — done in Phase 2A)
+
+**M1-only → `services/aurora-main-api/` (~110)**
+all 17 routers · all 18 `migrate_phase*` · `config.feature_flags` · `services.{ita,onboarding,billing,
+compliance,exports,gcp,llm,receipts,whatsapp_*,telegram_*,invoice_service,payment_service,pdf_service,
+vat_coach,exec_aggregator,allocation_queue,smart_reminders,…}` · **`services.autonomous.*`** (see below)
+
+**Verified findings**
+- **copilot ↔ M1 was a classifier artifact, not real coupling.** The only M1→copilot edge ran
+  `llm/registry.py → llm/anthropic_provider.py → copilot.anthropic_client` (all lazy). No code calls
+  `get_provider("anthropic")`. Severing the registry "anthropic" branch (Phase 2A) drops copilot.* out of
+  M1's closure. `anthropic_provider.py` is now orphaned → relocates to M2 in Phase 2B.
+- **`services.autonomous.*` is NOT dead — keep it (M1).** Pre-armed, dynamically loaded via
+  `autonomous/registry.py:get_service()` gated by `config/feature_flags.py` + activation at
+  `admin_exec.py:1590`. Deleting it would break the feature-flag activation contract.
+- **`services.tax_engine.*` IS dead** — only `tests/test_tax_engine.py` imports it. Archived to
+  `legacy/desktop/` in Phase 1b (with its test).
+- Package `__init__` shims (`app.config`,`app.middleware`,`app.routers`,`app.schemas`,`app.services.copilot`)
+  showed "unreached" only because submodules are imported directly — they travel with their package, not dead.
+
+_Caveat: AST analysis can't see importlib/string imports; the `autonomous`/`tax_engine` dead-or-dynamic
+question was the targeted exception, verified by a dedicated reference sweep._

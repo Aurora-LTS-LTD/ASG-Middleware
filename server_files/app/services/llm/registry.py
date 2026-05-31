@@ -24,26 +24,29 @@ def get_provider(name: str) -> LLMProvider:
     """Return the provider singleton for `name`.
 
     Known providers:
-      • "anthropic"     — Claude via Anthropic SDK
       • "vertex_gemini" — Google Vertex AI Gemini 1.5 Pro/Flash
+
+    NOTE (monorepo split): the "anthropic" provider was SEVERED from the M1
+    monolith. Claude/Anthropic is M2-only — the Copilot calls
+    app.services.copilot.anthropic_client directly, not via this registry. The
+    only M1->copilot static edge ran through anthropic_provider.py here; removing
+    this branch drops copilot.* out of M1's import closure. anthropic_provider.py
+    relocates to aurora-api-core in Phase 2B.
     """
     if name in _PROVIDERS:
         return _PROVIDERS[name]
 
-    if name == "anthropic":
-        from app.services.llm.anthropic_provider import AnthropicProvider
-        _PROVIDERS[name] = AnthropicProvider()
-    elif name == "vertex_gemini":
+    if name == "vertex_gemini":
         from app.services.llm.vertex_provider import VertexGeminiProvider
         _PROVIDERS[name] = VertexGeminiProvider()
     else:
         raise ValueError(
-            f"Unknown LLM provider: {name!r}. "
-            f"Supported: 'anthropic', 'vertex_gemini'."
+            f"Unknown LLM provider: {name!r}. Supported: 'vertex_gemini'. "
+            f"('anthropic' is M2-only — use app.services.copilot.anthropic_client.)"
         )
 
     return _PROVIDERS[name]
 
 
 def list_providers() -> list[str]:
-    return ["anthropic", "vertex_gemini"]
+    return ["vertex_gemini"]

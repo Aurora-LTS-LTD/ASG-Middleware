@@ -477,30 +477,36 @@ def health_check():
 
 
 # ─────────────────────────────────────────────────────────────
-# DASHBOARD PAGE
+# CEO DASHBOARD / UI PAGES — served from the front-end/ layer
 # ─────────────────────────────────────────────────────────────
+# The cockpit UI (dashboard, onboarding wizard, accountant SPA) moved out of the
+# backend into the repo's front-end/ceo-dashboard/ during the monorepo split
+# (Phase 2A, bundle-at-build). Resolution order:
+#   1. CEO_DASHBOARD_DIR env var (set by the M1 Dockerfile in Phase 4), else
+#   2. <repo>/front-end/ceo-dashboard relative to this file (local dev).
+# NOTE: until the Phase-4 Dockerfile COPYs front-end/ceo-dashboard into the M1
+# image (or sets CEO_DASHBOARD_DIR), a rebuilt M1 container will 404 these pages.
+_CEO_DASHBOARD_DIR = os.getenv("CEO_DASHBOARD_DIR") or os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "front-end", "ceo-dashboard")
+)
+
+
 @app.get("/dashboard")
 def serve_dashboard():
     """Serve the admin dashboard HTML page."""
-    return FileResponse("app/static/dashboard.html")
+    return FileResponse(os.path.join(_CEO_DASHBOARD_DIR, "dashboard.html"))
 
 
-# ─────────────────────────────────────────────────────────────
-# AURORA ONBOARDING WIZARD PAGE
-# ─────────────────────────────────────────────────────────────
 @app.get("/onboarding")
 def serve_onboarding():
     """Serve the multi-step Aurora onboarding wizard."""
-    return FileResponse("app/static/onboarding.html")
+    return FileResponse(os.path.join(_CEO_DASHBOARD_DIR, "onboarding.html"))
 
 
-# ─────────────────────────────────────────────────────────────
-# ACCOUNTANT PORTAL (Sprint 4)
-# ─────────────────────────────────────────────────────────────
 @app.get("/accountant")
 def serve_accountant_portal():
     """Serve the accountant-portal SPA (separate from /dashboard)."""
-    return FileResponse("app/static/accountant/index.html")
+    return FileResponse(os.path.join(_CEO_DASHBOARD_DIR, "accountant", "index.html"))
 
 
 # ═══════════════════════════════════════════════════════════════
