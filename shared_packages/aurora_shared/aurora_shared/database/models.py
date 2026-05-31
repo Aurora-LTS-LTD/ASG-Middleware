@@ -3346,7 +3346,6 @@ class InvoicePayment(Base):
 
     __table_args__ = (
         UniqueConstraint("invoice_id", "bank_entry_id", name="uq_payment_invoice_bank"),
-        Index("ix_invoice_payments_invoice_id", "invoice_id"),
     )
 
 
@@ -3379,7 +3378,6 @@ class SanctionsListEntry(Base):
 
     __table_args__ = (
         UniqueConstraint("list_source", "external_id", name="uq_sanctions_src_extid"),
-        Index("ix_sanctions_full_name", "full_name"),
     )
 
 
