@@ -187,10 +187,17 @@ def _ensure_wal_mode():
 # autoflush=False → the database is NOT updated in real-time as you
 #   make changes. Updates happen only when you commit.
 #
-# The bind parameter is a callable (get_engine) rather than a static
-# engine. This allows SQLAlchemy to call get_engine() each time a new
-# session is created, which triggers the lazy initialization logic.
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine)
+# The bind parameter is the `engine` proxy object (an instance of
+# `_LazyEngine`), NOT the bare `get_engine` callable. SQLAlchemy 2.0's
+# `sessionmaker(bind=...)` does NOT evaluate a callable bind — it
+# treats `bind` as an Engine and invokes `bind.connect()` on it
+# directly. Passing the raw function reference raises
+# `AttributeError: 'function' object has no attribute 'connect'` on
+# every session use (see git history for the v0.2.2 incident).
+# The `_LazyEngine` proxy's __getattr__ forwards `.connect()` to
+# `get_engine()` → real engine, preserving the lazy initialization
+# semantics without breaking SQLAlchemy's bind contract.
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 # ─────────────────────────────────────────────────────────────
