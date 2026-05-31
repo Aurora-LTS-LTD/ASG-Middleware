@@ -39,7 +39,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     Invitation,
     Organization,
     Membership,
@@ -47,7 +47,7 @@ from app.database import (
     User,
     ActionLog,
 )
-from app.services.identity.organization_service import add_membership
+from aurora_shared.services.identity.organization_service import add_membership
 
 
 # ─────────────────────────────────────────────────────────────

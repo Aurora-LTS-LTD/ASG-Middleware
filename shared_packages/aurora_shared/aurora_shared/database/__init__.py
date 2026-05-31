@@ -2,12 +2,12 @@
 ASG Solutions — Database Package
 =================================
 This file makes imports cleaner throughout the project.
-Instead of:  from app.database.connection import SessionLocal
-You can do:  from app.database import SessionLocal
+Instead of:  from aurora_shared.database.connection import SessionLocal
+You can do:  from aurora_shared.database import SessionLocal
 """
 
-from app.database.connection import engine, SessionLocal, Base, get_db, create_tables
-from app.database.models import (
+from aurora_shared.database.connection import engine, SessionLocal, Base, get_db, create_tables
+from aurora_shared.database.models import (
     Business,
     Invoice,
     ActionLog,

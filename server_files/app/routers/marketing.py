@@ -45,7 +45,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     SessionLocal,
     get_db,
     ActionLog,

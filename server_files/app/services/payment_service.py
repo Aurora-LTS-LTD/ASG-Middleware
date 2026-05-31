@@ -28,7 +28,7 @@ import datetime
 
 from sqlalchemy.orm import Session
 
-from app.database.models import Invoice, Payment, ActionLog, Business
+from aurora_shared.database.models import Invoice, Payment, ActionLog, Business
 
 
 # -----------------------------------------------------------------

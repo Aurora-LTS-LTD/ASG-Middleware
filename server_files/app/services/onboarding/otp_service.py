@@ -34,7 +34,7 @@ from typing import Optional
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     OtpVerification,
     User,
     ActionLog,

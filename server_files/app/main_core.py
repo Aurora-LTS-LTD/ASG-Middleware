@@ -4,7 +4,7 @@ Aurora LTS — Operational / AI Core Server  (aurora-api-core)
 Second Cloud Run service in the twin-engine architecture. Mounts ONLY
 the "Model 2" surface (the AI / operational core) and SHARES the same
 database models as the tax/compliance server (aurora-api-tax) via
-`app.database` — there is exactly one schema, so there is no drift.
+`aurora_shared.database` — there is exactly one schema, so there is no drift.
 
 WHAT THIS SERVER MOUNTS:
   • copilot      — Gemini Copilot console (conversations / SSE chat / approve /
@@ -40,7 +40,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import InterfaceError, OperationalError
 
-from app.database import create_tables
+from aurora_shared.database import create_tables
 from app.routers.copilot import router as copilot_router                     # M2 — Gemini Copilot console (extracted from admin_exec)
 from app.routers.native_shell import router as native_shell_router           # M2 — Aurora Mac Shell hardware-binding handshake
 

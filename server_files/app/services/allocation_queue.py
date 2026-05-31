@@ -36,7 +36,7 @@ import asyncio
 import datetime
 import os
 
-from app.database import SessionLocal, Invoice, ActionLog
+from aurora_shared.database import SessionLocal, Invoice, ActionLog
 # Sprint 3 — dispatcher chooses mock vs production via ITA_BACKEND env.
 # The function signature is preserved exactly; allocation_queue's caller
 # code below is unchanged.
@@ -176,7 +176,7 @@ async def _notify_allocation_success(bot, invoice: Invoice, result: dict, db) ->
     if not bot:
         return
 
-    from app.database import TelegramSession, User
+    from aurora_shared.database import TelegramSession, User
     from app.services.telegram_identity import get_user_by_telegram_id
 
     # ── Find the TelegramSession that started this invoice ──
@@ -241,7 +241,7 @@ async def _notify_allocation_exhausted(bot, invoice: Invoice, db) -> None:
     if not bot:
         return
 
-    from app.database import TelegramSession
+    from aurora_shared.database import TelegramSession
 
     session = db.query(TelegramSession).filter(
         TelegramSession.pending_invoice_id == invoice.id
@@ -281,7 +281,7 @@ async def _notify_whatsapp_allocation_success(invoice: Invoice, result: dict, db
     The link between "invoice X was started on WhatsApp" is the
     WhatsAppSession row whose `pending_invoice_id == invoice.id`.
     """
-    from app.database import WhatsAppSession
+    from aurora_shared.database import WhatsAppSession
     from app.services import whatsapp_meta_client as wa
     from app.services.whatsapp_strings import normalize_lang, t
 
@@ -346,7 +346,7 @@ async def _notify_whatsapp_allocation_success(invoice: Invoice, result: dict, db
 # ─────────────────────────────────────────────────────────────
 async def _notify_whatsapp_allocation_exhausted(invoice: Invoice, db) -> None:
     """Tell the WhatsApp user the allocation failed permanently."""
-    from app.database import WhatsAppSession
+    from aurora_shared.database import WhatsAppSession
     from app.services import whatsapp_meta_client as wa
 
     session = (

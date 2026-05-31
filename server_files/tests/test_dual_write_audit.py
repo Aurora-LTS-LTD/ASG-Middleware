@@ -72,12 +72,12 @@ def fail(s):
 # ─────────────────────────────────────────────────────────────
 def db():
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from app.database import SessionLocal
+    from aurora_shared.database import SessionLocal
     return SessionLocal()
 
 
 def fetch_org_for_business(business_id: int):
-    from app.database import Organization
+    from aurora_shared.database import Organization
     session = db()
     try:
         return (
@@ -90,7 +90,7 @@ def fetch_org_for_business(business_id: int):
 
 
 def fetch_membership(user_id: int, org_id: int):
-    from app.database import Membership
+    from aurora_shared.database import Membership
     session = db()
     try:
         return (
@@ -104,7 +104,7 @@ def fetch_membership(user_id: int, org_id: int):
 
 def cleanup_business_chain(business_id: int, also_user_ids: Optional[list] = None):
     """Tear down the test rows we created."""
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, Business, Organization, Membership, User, ActionLog,
     )
     session = SessionLocal()
@@ -244,7 +244,7 @@ def scenario_b_business_with_owner():
     ok(f"Membership(role=owner, is_primary=True) created for user_id={owner_user_id}")
 
     # Verify legacy compat: User.business_id was mirrored
-    from app.database import SessionLocal, User
+    from aurora_shared.database import SessionLocal, User
     session = SessionLocal()
     try:
         u = session.query(User).filter(User.id == owner_user_id).first()
@@ -343,7 +343,7 @@ def scenario_d_register_admin():
     ok("Admin user created with no Organization or Membership (correct)")
 
     # Cleanup
-    from app.database import SessionLocal, User
+    from aurora_shared.database import SessionLocal, User
     session = SessionLocal()
     try:
         session.query(User).filter(User.email == user_email).delete()
@@ -360,8 +360,8 @@ def scenario_e_runtime_backfill():
     title("E — Runtime backfill: orphan Business → get_or_create_organization_for_business")
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-    from app.database import SessionLocal, Business, Organization
-    from app.services.identity import get_or_create_organization_for_business
+    from aurora_shared.database import SessionLocal, Business, Organization
+    from aurora_shared.services.identity import get_or_create_organization_for_business
 
     session = SessionLocal()
     try:

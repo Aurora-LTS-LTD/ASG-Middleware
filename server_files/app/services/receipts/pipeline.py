@@ -50,7 +50,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     Receipt,
     Expense,
     User,
@@ -274,7 +274,7 @@ def process_receipt(
         category_notes: Optional[str] = None
         try:
             from app.services.gcp.gemini import categorise_expense
-            from app.database import Organization
+            from aurora_shared.database import Organization
             org = db.query(Organization).filter(Organization.id == organization_id).first()
             industry = org.industry_code if org else None
             cat_result = categorise_expense(

@@ -41,7 +41,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     User,
     WhatsAppSession,
     WhatsAppOutboundLog,
@@ -218,7 +218,7 @@ async def _case_c_trial_ending(db: Session, dry_run: bool, summary: dict) -> int
         if not org:
             continue
         # Find the owner User (first owner Membership)
-        from app.database import Membership
+        from aurora_shared.database import Membership
         owner_membership = (
             db.query(Membership)
             .filter(Membership.organization_id == org.id, Membership.role == "owner")
@@ -282,7 +282,7 @@ async def _send_reminder(
 ) -> None:
     """Lazy import the WhatsApp sender so dev tests without it still work."""
     from app.services import whatsapp_meta_client as wa
-    from app.services.whatsapp_identity import can_send_freeform, get_or_create_session
+    from aurora_shared.services.whatsapp_identity import can_send_freeform, get_or_create_session
 
     session = get_or_create_session(phone, db)
     if not can_send_freeform(session):

@@ -28,7 +28,7 @@ import datetime
 
 from sqlalchemy.orm import Session
 
-from app.database.models import ActionLog
+from aurora_shared.database.models import ActionLog
 from app.services.payment_service import get_overdue_invoices
 from app.services.whatsapp_sender import send_invoice_via_whatsapp
 

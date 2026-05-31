@@ -45,7 +45,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Upload
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     get_db,
     User,
     OnboardingState,
@@ -55,13 +55,13 @@ from app.database import (
     Subscription,
     ActionLog,
 )
-from app.middleware.auth_middleware import get_current_user
-from app.services.auth_service import (
+from aurora_shared.middleware.auth_middleware import get_current_user
+from aurora_shared.services.auth_service import (
     hash_password,
     verify_password,
     create_access_token,
 )
-from app.services.identity import resolve_user_context
+from aurora_shared.services.identity import resolve_user_context
 from app.services.onboarding import (
     issue_otp,
     verify_otp,

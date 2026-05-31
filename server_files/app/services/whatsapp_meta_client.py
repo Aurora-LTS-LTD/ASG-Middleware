@@ -40,7 +40,7 @@ from typing import Any
 import httpx
 from sqlalchemy.orm import Session
 
-from app.database import WhatsAppOutboundLog
+from aurora_shared.database import WhatsAppOutboundLog
 
 
 # ─────────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ async def _log_and_send(
     # ── ExecEvent on terminal failure only (4xx) — Tier 1 Alert Stream
     if log.status == "failed":
         try:
-            from app.services.exec_events import publish_exec_event
+            from aurora_shared.services.exec_events import publish_exec_event
             publish_exec_event(
                 db,
                 kind="wa_send_failed",

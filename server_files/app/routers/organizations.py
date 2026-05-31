@@ -57,7 +57,7 @@ from sqlalchemy.orm import Session
 # by Pydantic. The pattern below is RFC-5322 best-effort.
 _EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
-from app.database import (
+from aurora_shared.database import (
     get_db,
     User,
     Organization,
@@ -65,11 +65,11 @@ from app.database import (
     AccountantEngagement,
     Invitation,
 )
-from app.middleware.auth_middleware import (
+from aurora_shared.middleware.auth_middleware import (
     get_current_user,
     require_org_access,
 )
-from app.services.identity import (
+from aurora_shared.services.identity import (
     create_organization,
     resolve_user_context,
     create_invitation,
@@ -393,7 +393,7 @@ def validate_tax_id_endpoint(value: str = ""):
     PUBLIC by design — runs the same algorithm the user could run
     locally; no secret leakage. Convenient for UX.
     """
-    from app.services.identity.tax_id import infer_legal_structure_from_tax_id
+    from aurora_shared.services.identity.tax_id import infer_legal_structure_from_tax_id
     normalized = normalize_tax_id(value)
     return TaxIdValidationOut(
         valid=validate_tax_id_israel(normalized),

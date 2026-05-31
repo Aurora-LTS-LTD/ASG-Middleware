@@ -23,7 +23,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     Export,
     Organization,
     User,

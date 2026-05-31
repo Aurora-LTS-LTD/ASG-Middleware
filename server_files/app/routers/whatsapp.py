@@ -43,10 +43,10 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.database import SessionLocal, User, WhatsAppOutboundLog, get_db
-from app.middleware.auth_middleware import get_current_user
+from aurora_shared.database import SessionLocal, User, WhatsAppOutboundLog, get_db
+from aurora_shared.middleware.auth_middleware import get_current_user
 from app.services import whatsapp_engine
-from app.services.whatsapp_identity import generate_pairing_code
+from aurora_shared.services.whatsapp_identity import generate_pairing_code
 
 
 # ─────────────────────────────────────────────────────────────

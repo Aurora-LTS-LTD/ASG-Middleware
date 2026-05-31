@@ -26,8 +26,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db, Invoice, Payment, User
-from app.middleware.auth_middleware import (
+from aurora_shared.database import get_db, Invoice, Payment, User
+from aurora_shared.middleware.auth_middleware import (
     get_current_user,
     get_business_filter,
     require_admin,
@@ -199,7 +199,7 @@ def payment_summary(
         return get_business_balance(db, biz_filter)
     else:
         # Admin — aggregate across all businesses
-        from app.database.models import Business as BizModel
+        from aurora_shared.database.models import Business as BizModel
         all_biz = db.query(BizModel).all()
 
         total_outstanding = 0.0

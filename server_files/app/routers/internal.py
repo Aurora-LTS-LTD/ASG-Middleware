@@ -49,7 +49,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     get_db,
     SubscriptionPayment,
     Subscription,
@@ -87,7 +87,7 @@ def _verify_internal_token(
         token = authorization.split(" ", 1)[1].strip()
         if token:
             try:
-                from app.services.auth_oidc import (
+                from aurora_shared.services.auth_oidc import (
                     verify_google_oidc_token,
                     OidcVerificationError,
                 )
@@ -200,7 +200,7 @@ def expire_invitations_endpoint(
     _: None = Depends(_verify_internal_token),
 ):
     """Bulk-expire invitations past their expires_at."""
-    from app.services.identity import expire_old_invitations
+    from aurora_shared.services.identity import expire_old_invitations
     count = expire_old_invitations(db=db)
     return {"ok": True, "expired_count": count}
 
@@ -268,7 +268,7 @@ def charge_trial_ends_endpoint(
             summary["failed"] += 1
             continue
 
-        from app.database import PaymentMethod
+        from aurora_shared.database import PaymentMethod
         pm = db.query(PaymentMethod).filter(PaymentMethod.id == sub.payment_method_id).first()
         if not pm:
             payment.status = "failed"
@@ -499,7 +499,7 @@ async def eod_brief_endpoint(
 
     # Audit
     try:
-        from app.services.exec_events import publish_exec_event
+        from aurora_shared.services.exec_events import publish_exec_event
         publish_exec_event(
             db,
             kind="eod_brief_sent",

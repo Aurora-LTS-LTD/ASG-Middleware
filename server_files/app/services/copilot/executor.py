@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.database.models import (
+from aurora_shared.database.models import (
     BusinessCategory,
     Organization,
     User,
@@ -47,7 +47,7 @@ from app.services.copilot.tools import (
     UpdateCategoryInput,
     WRITE_TOOLS,
 )
-from app.services.exec_events import publish_exec_event
+from aurora_shared.services.exec_events import publish_exec_event
 
 log = logging.getLogger(__name__)
 

@@ -236,7 +236,7 @@ class AbstractAutonomousService:
 
         # Audit: publish ExecEvent so the Alert Stream surfaces activity
         try:
-            from app.services.exec_events import publish_exec_event
+            from aurora_shared.services.exec_events import publish_exec_event
             publish_exec_event(
                 db,
                 kind=f"autonomous_invoked",

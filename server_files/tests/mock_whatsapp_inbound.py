@@ -143,7 +143,7 @@ def show_replies(resp: dict, max_chars: int = 220) -> None:
 def db_lookup_user_org(phone: str) -> dict:
     """Look up the User + paired Org (if any) for a given WhatsApp phone."""
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from app.database import SessionLocal, User, Organization, Membership, Invitation
+    from aurora_shared.database import SessionLocal, User, Organization, Membership, Invitation
 
     db = SessionLocal()
     try:
@@ -197,7 +197,7 @@ def db_lookup_user_org(phone: str) -> dict:
 def db_cleanup_test_user(phone: str) -> None:
     """Remove the synthetic User + its Org + Membership + Invitations + legacy Business."""
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, User, Organization, Membership, Invitation,
         Business, WhatsAppSession, WhatsAppOutboundLog,
     )

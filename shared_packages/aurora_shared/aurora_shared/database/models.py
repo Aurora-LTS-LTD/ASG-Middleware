@@ -36,7 +36,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship  # Defines connections between tables
 
-from app.database.connection import Base  # The base class all models inherit from
+from aurora_shared.database.connection import Base  # The base class all models inherit from
 
 
 # ═══════════════════════════════════════════════════════════════

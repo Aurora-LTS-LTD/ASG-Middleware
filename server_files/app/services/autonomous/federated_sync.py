@@ -75,7 +75,7 @@ class FederatedSyncService(AbstractAutonomousService):
     async def _run_active(
         self, payload: dict, db: "Session"
     ) -> AutonomousResult:
-        from app.database.models import FederatedSyncLog, Organization
+        from aurora_shared.database.models import FederatedSyncLog, Organization
 
         model_name = payload["model_name"].strip()
         round_id = payload.get("round_id") or str(uuid.uuid4())

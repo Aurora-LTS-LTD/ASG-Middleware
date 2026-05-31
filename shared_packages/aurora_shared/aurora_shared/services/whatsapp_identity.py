@@ -35,7 +35,7 @@ import random
 
 from sqlalchemy.orm import Session
 
-from app.database import User, WhatsAppSession
+from aurora_shared.database import User, WhatsAppSession
 
 # Pairing code is valid for this many minutes
 PAIRING_CODE_TTL_MINUTES = 10

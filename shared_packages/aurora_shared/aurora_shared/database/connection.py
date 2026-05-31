@@ -137,7 +137,7 @@ def create_tables():
     # Import models here to ensure they're registered with Base
     # before we call create_all. Without this import, SQLAlchemy
     # wouldn't know about our models.
-    from app.database import models  # noqa: F401
+    from aurora_shared.database import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     print("[DATABASE] All tables created successfully!")
 

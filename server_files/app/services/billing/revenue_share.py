@@ -51,7 +51,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     SubscriptionPayment,
     AccountantEngagement,
     RevenueShareLedger,

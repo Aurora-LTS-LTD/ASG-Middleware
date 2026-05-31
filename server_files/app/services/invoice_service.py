@@ -28,7 +28,7 @@ import datetime
 
 from sqlalchemy.orm import Session
 
-from app.database import Invoice, Business, ActionLog
+from aurora_shared.database import Invoice, Business, ActionLog
 from app.services.tax_compliance import (
     calculate_vat,
     check_tax_compliance,
@@ -179,7 +179,7 @@ def create_draft_invoice(
 
     # ── Publish ExecEvent for the CEO Alert Stream (defensive — never blocks)
     try:
-        from app.services.exec_events import publish_exec_event
+        from aurora_shared.services.exec_events import publish_exec_event
         publish_exec_event(
             db,
             kind="invoice_draft_created",
@@ -282,7 +282,7 @@ async def finalize_invoice(
 
     # ── Publish ExecEvent for the CEO Alert Stream (defensive)
     try:
-        from app.services.exec_events import publish_exec_event
+        from aurora_shared.services.exec_events import publish_exec_event
         # Larger amount → higher severity so the CEO sees it surfaced.
         sev = "warning" if (invoice.amount_total or 0) >= 10000 else "info"
         publish_exec_event(

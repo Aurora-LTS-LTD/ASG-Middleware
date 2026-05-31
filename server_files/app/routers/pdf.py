@@ -20,8 +20,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.database import get_db, Invoice, Business, User
-from app.middleware.auth_middleware import (
+from aurora_shared.database import get_db, Invoice, Business, User
+from aurora_shared.middleware.auth_middleware import (
     get_current_user,
     get_business_filter,
     require_admin,

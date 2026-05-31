@@ -57,7 +57,7 @@ class HcarlOrchestratorService(AbstractAutonomousService):
     async def _run_active(
         self, payload: dict, db: "Session"
     ) -> AutonomousResult:
-        from app.database.models import (
+        from aurora_shared.database.models import (
             HcarlPolicyState,
             ProjectConstraint,
         )

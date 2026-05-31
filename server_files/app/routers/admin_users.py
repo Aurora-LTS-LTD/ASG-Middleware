@@ -26,13 +26,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     get_db,
     User,
     Membership,
     Organization,
 )
-from app.middleware.auth_middleware import require_admin
+from aurora_shared.middleware.auth_middleware import require_admin
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-users"])

@@ -6,7 +6,7 @@ accountant_payouts, accountant_referrals. Idempotent probe-and-skip.
 """
 
 from sqlalchemy import text
-from app.database.connection import engine
+from aurora_shared.database.connection import engine
 
 
 def run_phase10_migrations() -> None:

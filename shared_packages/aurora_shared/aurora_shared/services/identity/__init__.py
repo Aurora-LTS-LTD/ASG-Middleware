@@ -12,7 +12,7 @@ This package owns everything related to:
   - Israeli tax-ID validation (the 9-digit mod-11 checksum)
 
 Public re-exports for ergonomic imports elsewhere:
-    from app.services.identity import (
+    from aurora_shared.services.identity import (
         validate_tax_id_israel,
         create_organization,
         add_membership,
@@ -24,12 +24,12 @@ Public re-exports for ergonomic imports elsewhere:
     )
 """
 
-from app.services.identity.tax_id import (
+from aurora_shared.services.identity.tax_id import (
     validate_tax_id_israel,
     infer_legal_structure_from_tax_id,
     normalize_tax_id,
 )
-from app.services.identity.organization_service import (
+from aurora_shared.services.identity.organization_service import (
     create_organization,
     add_membership,
     resolve_user_context,
@@ -37,13 +37,13 @@ from app.services.identity.organization_service import (
     get_primary_org,
     get_or_create_organization_for_business,
 )
-from app.services.identity.invitation_service import (
+from aurora_shared.services.identity.invitation_service import (
     create_invitation,
     accept_invitation,
     expire_old_invitations,
     get_invitation_by_code,
 )
-from app.services.identity.pairing import (
+from aurora_shared.services.identity.pairing import (
     generate_pairing_code,
     verify_pairing_code,
     PAIRING_CODE_TTL_MINUTES,

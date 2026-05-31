@@ -57,7 +57,7 @@ from telegram.ext import (
     filters,
 )
 
-from app.database import SessionLocal, Invoice, User
+from aurora_shared.database import SessionLocal, Invoice, User
 from app.services.tax_compliance import calculate_vat, check_tax_compliance
 from app.services.invoice_service import (
     create_draft_invoice,

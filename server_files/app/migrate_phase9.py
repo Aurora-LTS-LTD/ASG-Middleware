@@ -15,7 +15,7 @@ NO COLUMN ADDITIONS:
 
 from sqlalchemy import text
 
-from app.database.connection import engine
+from aurora_shared.database.connection import engine
 
 
 def run_phase9_migrations() -> None:

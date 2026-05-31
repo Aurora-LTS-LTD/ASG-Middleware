@@ -37,7 +37,7 @@ RUN:
 # ─────────────────────────────────────────────────────────────
 from sqlalchemy import text
 
-from app.database.connection import engine, SessionLocal
+from aurora_shared.database.connection import engine, SessionLocal
 
 
 # ─────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ def _fix_payment_methods_org_id_nullability() -> bool:
             conn.commit()
 
             # Recreate via SQLAlchemy metadata — picks up the new nullable=True
-            from app.database.models import PaymentMethod  # noqa: F401 — registers metadata
+            from aurora_shared.database.models import PaymentMethod  # noqa: F401 — registers metadata
             PaymentMethod.__table__.create(bind=engine)
 
             # Re-insert lifted rows

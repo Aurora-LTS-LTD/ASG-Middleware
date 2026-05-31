@@ -41,7 +41,7 @@ def install_immutability_guards() -> None:
         return
 
     # Lazy imports to avoid circular dep at app boot
-    from app.database import (
+    from aurora_shared.database import (
         ItaAuditLog, ActionLog,
         RevenueShareLedger, AccountantPayout, SubscriptionPayment,
     )

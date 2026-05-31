@@ -40,8 +40,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from telegram import Update
 
-from app.database import get_db, User
-from app.middleware.auth_middleware import get_current_user, require_admin
+from aurora_shared.database import get_db, User
+from aurora_shared.middleware.auth_middleware import get_current_user, require_admin
 from app.services.telegram_bot import get_application, get_last_update_at
 from app.services.telegram_identity import generate_pairing_code
 

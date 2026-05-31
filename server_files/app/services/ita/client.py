@@ -363,7 +363,7 @@ def _write_audit_row(
     must NOT prevent the caller from receiving the actual ITA result.
     """
     try:
-        from app.database import SessionLocal, ItaAuditLog
+        from aurora_shared.database import SessionLocal, ItaAuditLog
     except Exception as e:
         print(f"[ITA] ⚠️ audit log import failed: {e}")
         return

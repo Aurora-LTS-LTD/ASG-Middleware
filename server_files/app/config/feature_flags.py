@@ -218,7 +218,7 @@ def is_feature_active(
 
     # Lazy import — avoid circular dep with models.py
     try:
-        from app.database.models import GrowthMilestone
+        from aurora_shared.database.models import GrowthMilestone
         row = (
             db.query(GrowthMilestone)
             .filter(GrowthMilestone.feature_name == feature.value)

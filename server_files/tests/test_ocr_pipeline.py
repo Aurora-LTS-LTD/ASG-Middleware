@@ -83,18 +83,18 @@ def fail(s):
 # the pipeline runs, (c) clean up rows after each scenario.
 # ─────────────────────────────────────────────────────────────
 def db():
-    from app.database import SessionLocal
+    from aurora_shared.database import SessionLocal
     return SessionLocal()
 
 
 def setup_test_tenant(phone: str) -> dict:
     """Create User + Org + Membership + WhatsAppSession bound to `phone`."""
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, User, Organization, Membership, Business,
         WhatsAppSession,
     )
-    from app.services.auth_service import hash_password
-    from app.services.identity import create_organization
+    from aurora_shared.services.auth_service import hash_password
+    from aurora_shared.services.identity import create_organization
     import datetime
 
     s = SessionLocal()
@@ -133,7 +133,7 @@ def setup_test_tenant(phone: str) -> dict:
 
 
 def cleanup_test_tenant(phone: str) -> None:
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, User, Organization, Membership, Business,
         WhatsAppSession, WhatsAppOutboundLog, Receipt, Expense, ActionLog,
     )
@@ -164,7 +164,7 @@ def cleanup_test_tenant(phone: str) -> None:
 
 
 def fetch_user_receipts(org_id: int) -> list:
-    from app.database import SessionLocal, Receipt
+    from aurora_shared.database import SessionLocal, Receipt
     s = SessionLocal()
     try:
         return [{"id": r.id, "ocr_status": r.ocr_status,
@@ -176,7 +176,7 @@ def fetch_user_receipts(org_id: int) -> list:
 
 
 def fetch_expense_for_receipt(receipt_id: str):
-    from app.database import SessionLocal, Expense
+    from aurora_shared.database import SessionLocal, Expense
     s = SessionLocal()
     try:
         e = s.query(Expense).filter(Expense.receipt_id == receipt_id).first()
@@ -575,7 +575,7 @@ def _run_via_upload_api() -> int:
             ok("List endpoint returns all 4 receipts for the org")
 
             # ── Cleanup ──
-            from app.database import (
+            from aurora_shared.database import (
                 SessionLocal, Receipt, Expense, Membership,
                 Organization, Business, ActionLog,
             )

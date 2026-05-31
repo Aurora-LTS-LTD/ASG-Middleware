@@ -91,12 +91,12 @@ def fail(s):
 # ─────────────────────────────────────────────────────────────
 def setup_test_invoice():
     """Create a User + Org + Invoice with requires_allocation=1 for testing."""
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, create_tables, User, Invoice, Membership,
         Organization, Business,
     )
-    from app.services.auth_service import hash_password
-    from app.services.identity import create_organization
+    from aurora_shared.services.auth_service import hash_password
+    from aurora_shared.services.identity import create_organization
 
     create_tables()
     s = SessionLocal()
@@ -137,7 +137,7 @@ def setup_test_invoice():
 
 
 def cleanup(ctx):
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, User, Invoice, Membership, Organization, Business,
         ItaAuditLog, ActionLog,
     )
@@ -159,7 +159,7 @@ def cleanup(ctx):
 
 
 def fetch_audit_rows(invoice_id):
-    from app.database import SessionLocal, ItaAuditLog
+    from aurora_shared.database import SessionLocal, ItaAuditLog
     s = SessionLocal()
     try:
         return s.query(ItaAuditLog).filter(ItaAuditLog.invoice_id == invoice_id).all()
@@ -168,7 +168,7 @@ def fetch_audit_rows(invoice_id):
 
 
 def reload_invoice(invoice_id):
-    from app.database import SessionLocal, Invoice
+    from aurora_shared.database import SessionLocal, Invoice
     s = SessionLocal()
     try:
         return s.query(Invoice).filter(Invoice.id == invoice_id).first()
@@ -493,7 +493,7 @@ async def main():
     title("Aurora Sprint 3 — ITA Client + Secret Manager + HMAC Tests")
 
     # Ensure DB exists
-    from app.database import create_tables
+    from aurora_shared.database import create_tables
     create_tables()
     from app.migrate_phase4 import run_phase4_migrations; run_phase4_migrations()
     from app.migrate_phase5 import run_phase5_migrations; run_phase5_migrations()

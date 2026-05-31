@@ -20,11 +20,11 @@ NOTE — TRANSPORT PARALLELISM:
   specific specifics (the wa.me deep link). A future refactor will
   move that into a transport-agnostic interface. For now the duplication
   is acceptable; the goal of this file is to provide a stable import
-  path (`from app.services.identity import generate_pairing_code, ...`)
+  path (`from aurora_shared.services.identity import generate_pairing_code, ...`)
   that survives that refactor.
 
 USAGE:
-    from app.services.identity import generate_pairing_code, verify_pairing_code
+    from aurora_shared.services.identity import generate_pairing_code, verify_pairing_code
 
     # Web flow — generate code, show in dashboard:
     payload = generate_pairing_code(user_id=42, db=db)
@@ -43,7 +43,7 @@ USAGE:
 # is about establishing the new IMPORT PATH; the implementation move
 # is a non-functional follow-up.
 
-from app.services.whatsapp_identity import (
+from aurora_shared.services.whatsapp_identity import (
     generate_pairing_code,
     verify_pairing_code,
     PAIRING_CODE_TTL_MINUTES,

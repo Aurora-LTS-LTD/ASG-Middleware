@@ -56,7 +56,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     get_db,
     User,
     Organization,
@@ -73,7 +73,7 @@ from app.database import (
     AccountantReferral,
     ActionLog,
 )
-from app.middleware.auth_middleware import get_current_user, require_admin
+from aurora_shared.middleware.auth_middleware import get_current_user, require_admin
 from app.services.exports import (
     create_export,
     get_export as svc_get_export,

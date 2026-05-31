@@ -50,8 +50,8 @@ import datetime
 
 from sqlalchemy import text
 
-from app.database.connection import engine, SessionLocal
-from app.database.models import (
+from aurora_shared.database.connection import engine, SessionLocal
+from aurora_shared.database.models import (
     Business,
     User,
     Organization,

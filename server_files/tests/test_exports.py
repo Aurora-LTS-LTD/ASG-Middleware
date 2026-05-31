@@ -68,12 +68,12 @@ def fail(s): print(_c(91, f"   ✗ {s}"))
 # ─────────────────────────────────────────────────────────────
 def setup_org_with_invoices():
     """Create an Org + 2 finalized invoices for export testing."""
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, create_tables, User, Invoice, Organization,
         Membership, Business, Expense, Receipt,
     )
-    from app.services.auth_service import hash_password
-    from app.services.identity import create_organization
+    from aurora_shared.services.auth_service import hash_password
+    from aurora_shared.services.identity import create_organization
 
     create_tables()
     s = SessionLocal()
@@ -129,7 +129,7 @@ def setup_org_with_invoices():
         s.commit()
 
         # Accountant user with active engagement
-        from app.database import AccountantEngagement
+        from aurora_shared.database import AccountantEngagement
         acct = User(
             email=f"cpa_{uuid.uuid4().hex[:6]}@cpa.co.il",
             password_hash=hash_password("acct_pass_2026"),
@@ -158,7 +158,7 @@ def setup_org_with_invoices():
 
 
 def cleanup(ctx):
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, User, Invoice, Membership, Organization, Business,
         Expense, Receipt, Export, AccountantEngagement, AccountantCoaMapping,
         ActionLog,
@@ -194,7 +194,7 @@ def cleanup(ctx):
 # ─────────────────────────────────────────────────────────────
 def scenario_a_uniform_file():
     title("A — Uniform File generation (INI.TXT + BKMVDATA.TXT)")
-    from app.database import SessionLocal
+    from aurora_shared.database import SessionLocal
     from app.services.exports import build_uniform_file
 
     ctx = setup_org_with_invoices()
@@ -254,7 +254,7 @@ def scenario_a_uniform_file():
 
 def scenario_b_hashavshevet():
     title("B — Hashavshevet CSV generation")
-    from app.database import SessionLocal
+    from aurora_shared.database import SessionLocal
     from app.services.exports import build_hashavshevet_csv
 
     ctx = setup_org_with_invoices()
@@ -291,7 +291,7 @@ def scenario_b_hashavshevet():
 
 def scenario_c_service_orchestrator():
     title("C — create_export() uploads + persists Export row")
-    from app.database import SessionLocal, Export
+    from aurora_shared.database import SessionLocal, Export
     from app.services.exports import create_export
 
     ctx = setup_org_with_invoices()
@@ -388,8 +388,8 @@ def scenario_e_access_control():
     ctx = setup_org_with_invoices()
 
     # Create a SECOND accountant who is NOT engaged on this org
-    from app.database import SessionLocal, User
-    from app.services.auth_service import hash_password
+    from aurora_shared.database import SessionLocal, User
+    from aurora_shared.services.auth_service import hash_password
     s = SessionLocal()
     try:
         intruder = User(

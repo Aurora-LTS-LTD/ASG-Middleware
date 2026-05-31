@@ -12,7 +12,7 @@ POSTGRES IMMUTABILITY (production):
 """
 
 from sqlalchemy import text, event
-from app.database.connection import engine
+from aurora_shared.database.connection import engine
 
 
 def run_phase11_migrations() -> None:

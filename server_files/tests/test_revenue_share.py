@@ -57,13 +57,13 @@ def setup_full_stack(*, with_invoice_history: bool = True, accountant_self_owns:
     `accountant_self_owns=True` means the accountant is also a Membership
     (self-onboard fraud trigger).
     """
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, create_tables, User, Invoice, Organization, Membership,
         Business, Subscription, PaymentMethod, SubscriptionPayment,
         AccountantEngagement,
     )
-    from app.services.auth_service import hash_password
-    from app.services.identity import create_organization
+    from aurora_shared.services.auth_service import hash_password
+    from aurora_shared.services.identity import create_organization
 
     create_tables()
     s = SessionLocal()
@@ -172,7 +172,7 @@ def setup_full_stack(*, with_invoice_history: bool = True, accountant_self_owns:
 
 
 def cleanup(ctx):
-    from app.database import (
+    from aurora_shared.database import (
         SessionLocal, User, Invoice, Membership, Organization, Business,
         Subscription, PaymentMethod, SubscriptionPayment,
         AccountantEngagement, RevenueShareLedger, AccountantPayout,
@@ -214,7 +214,7 @@ def cleanup(ctx):
 # ─────────────────────────────────────────────────────────────
 def scenario_a_accrue():
     title("A — accrue_on_charge_success creates a ledger row at 20%")
-    from app.database import SessionLocal, RevenueShareLedger
+    from aurora_shared.database import SessionLocal, RevenueShareLedger
     from app.services.billing import accrue_on_charge_success
 
     ctx = setup_full_stack()
@@ -243,7 +243,7 @@ def scenario_a_accrue():
 
 def scenario_b_fraud_rules():
     title("B — Fraud rules hold suspicious rows")
-    from app.database import SessionLocal, RevenueShareLedger, Organization
+    from aurora_shared.database import SessionLocal, RevenueShareLedger, Organization
     from app.services.billing import accrue_on_charge_success, close_month
 
     # Sub-scenario B1: young tenant
@@ -307,14 +307,14 @@ def scenario_b_fraud_rules():
 
 def scenario_c_close_month_rollup():
     title("C — close_month rolls up payable rows into ONE AccountantPayout")
-    from app.database import SessionLocal, RevenueShareLedger, AccountantPayout
+    from aurora_shared.database import SessionLocal, RevenueShareLedger, AccountantPayout
     from app.services.billing import accrue_on_charge_success, close_month
 
     ctx = setup_full_stack()
     db = SessionLocal()
     try:
         # Create a SECOND payment for the same sub so we have 2 ledger rows
-        from app.database import SubscriptionPayment
+        from aurora_shared.database import SubscriptionPayment
         p2 = SubscriptionPayment(
             subscription_id=ctx["subscription_id"], organization_id=ctx["org_id"],
             amount_minor_units=19_900, currency="ILS", status="succeeded",
@@ -352,7 +352,7 @@ def scenario_c_close_month_rollup():
 
 def scenario_d_payout_lifecycle():
     title("D — Payout lifecycle pending → approved → paid; ledger rows follow")
-    from app.database import SessionLocal, RevenueShareLedger, AccountantPayout
+    from aurora_shared.database import SessionLocal, RevenueShareLedger, AccountantPayout
     from app.services.billing import (
         accrue_on_charge_success, close_month,
         approve_payout, mark_payout_paid,
@@ -395,7 +395,7 @@ def scenario_d_payout_lifecycle():
 def scenario_e_earnings_endpoint():
     title("E — /api/v1/accountant/earnings shows lifetime + current-month")
     ctx = setup_full_stack()
-    from app.database import SessionLocal
+    from aurora_shared.database import SessionLocal
     from app.services.billing import accrue_on_charge_success
     db = SessionLocal()
     try:
@@ -437,7 +437,7 @@ def scenario_f_internal_token_gate():
 
 def scenario_g_referral_idempotent():
     title("G — record_referral is idempotent")
-    from app.database import SessionLocal, AccountantReferral
+    from aurora_shared.database import SessionLocal, AccountantReferral
     from app.services.billing import record_referral
 
     ctx = setup_full_stack()

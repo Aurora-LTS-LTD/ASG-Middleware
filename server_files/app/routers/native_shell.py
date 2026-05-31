@@ -69,18 +69,18 @@ from cryptography.exceptions import InvalidSignature
 
 from jose import jwt as jose_jwt
 
-from app.database import get_db
-from app.database.models import (
+from aurora_shared.database import get_db
+from aurora_shared.database.models import (
     User,
     NativeDeviceKey,
     NativeHandshakeChallenge,
     ActionLog,
 )
-from app.middleware.auth_middleware import (
+from aurora_shared.middleware.auth_middleware import (
     require_admin,
     _resolve_native_session,
 )
-from app.services.webauthn_service import require_step_up
+from aurora_shared.services.webauthn_service import require_step_up
 
 log = logging.getLogger(__name__)
 

@@ -90,7 +90,7 @@ def main() -> None:
 
     # Lazy imports so the help text works without DB access.
     from jose import jwt
-    from app.database import SessionLocal, BreakGlassToken, User
+    from aurora_shared.database import SessionLocal, BreakGlassToken, User
 
     db = SessionLocal()
     try:

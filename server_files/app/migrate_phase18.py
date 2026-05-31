@@ -23,7 +23,7 @@ import logging
 
 from sqlalchemy import text
 
-from app.database.connection import engine, SessionLocal
+from aurora_shared.database.connection import engine, SessionLocal
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def _seed_growth_milestones_if_empty() -> None:
         MILESTONE_THRESHOLDS,
         get_threshold,
     )
-    from app.database.models import GrowthMilestone
+    from aurora_shared.database.models import GrowthMilestone
 
     with SessionLocal() as db:
         try:

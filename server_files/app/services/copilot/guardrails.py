@@ -29,7 +29,7 @@ from typing import Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.database.models import ClaudeApiUsage
+from aurora_shared.database.models import ClaudeApiUsage
 from app.services.copilot.pricing_meta import cost_for_usage_usd
 
 log = logging.getLogger(__name__)
@@ -251,7 +251,7 @@ def record_budget_extension(
 
     # Audit event
     try:
-        from app.services.exec_events import publish_exec_event
+        from aurora_shared.services.exec_events import publish_exec_event
         publish_exec_event(
             db,
             kind="copilot_budget_extended",

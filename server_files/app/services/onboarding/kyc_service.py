@@ -41,7 +41,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import KycDocument, User, ActionLog
+from aurora_shared.database import KycDocument, User, ActionLog
 
 
 # ─────────────────────────────────────────────────────────────

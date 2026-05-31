@@ -35,7 +35,7 @@ import os
 
 import httpx
 
-from app.database import SessionLocal, WhatsAppOutboundLog
+from aurora_shared.database import SessionLocal, WhatsAppOutboundLog
 from app.services import whatsapp_meta_client as wa
 
 
@@ -136,7 +136,7 @@ async def process_pending_outbounds() -> int:
                 # ── ExecEvent for the CEO Alert Stream (defensive)
                 if row.status == "failed":
                     try:
-                        from app.services.exec_events import publish_exec_event
+                        from aurora_shared.services.exec_events import publish_exec_event
                         publish_exec_event(
                             db,
                             kind="wa_send_failed",

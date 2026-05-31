@@ -14,8 +14,8 @@ Extracted verbatim from admin_exec.py as part of the operational-core split
 
 Mounted on aurora-api-core (app.main_core). The URL prefix is preserved
 exactly (/api/v1/admin/exec/copilot/*) so existing clients and the cockpit
-M2 panel are unaffected. Shares the Aurora schema via app.database — no
-schema drift. Write-tool approval still defers to app.services.webauthn_service
+M2 panel are unaffected. Shares the Aurora schema via aurora_shared.database — no
+schema drift. Write-tool approval still defers to aurora_shared.services.webauthn_service
 for step-up verification (shared DB), so step-up works across both engines.
 """
 
@@ -33,7 +33,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
-from app.database import (
+from aurora_shared.database import (
     get_db,
     User,
     CopilotConversation,
@@ -41,7 +41,7 @@ from app.database import (
     CopilotProvisioningRun,
     ClaudeApiUsage,
 )
-from app.middleware.auth_middleware import require_admin
+from aurora_shared.middleware.auth_middleware import require_admin
 
 log = logging.getLogger(__name__)
 
@@ -355,7 +355,7 @@ async def copilot_chat(
             extract_pending_tool_uses,
         )
         from app.services.copilot.executor import execute_search_categories
-        from app.database.connection import SessionLocal as _SL
+        from aurora_shared.database.connection import SessionLocal as _SL
 
         def _frame(payload: dict, event: str | None = None) -> str:
             lines = []
@@ -519,7 +519,7 @@ def copilot_approve(
     step_up_credential_id: Optional[int] = None
     if require_step_up:
         # T3.3 — verify body.step_up_token via webauthn_service
-        from app.services.webauthn_service import (
+        from aurora_shared.services.webauthn_service import (
             verify_step_up_token,
             StepUpVerificationError,
         )

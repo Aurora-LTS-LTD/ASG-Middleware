@@ -23,8 +23,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db, BreakGlassToken, User, ActionLog
-from app.middleware.auth_middleware import require_admin_iap_strict
+from aurora_shared.database import get_db, BreakGlassToken, User, ActionLog
+from aurora_shared.middleware.auth_middleware import require_admin_iap_strict
 
 
 router = APIRouter(prefix="/api/v1/admin/break-glass", tags=["admin-break-glass"])

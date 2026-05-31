@@ -60,7 +60,7 @@ ATOMICITY OF activate():
     - ActionLog rows for every change (KYC dossier)
 
 REUSE:
-  - create_organization() from app.services.identity → Organization + Membership + dual-write to legacy Business
+  - create_organization() from aurora_shared.services.identity → Organization + Membership + dual-write to legacy Business
   - create_subscription() + schedule_first_charge() from this package
   - invoice_service is NOT called on activation (trial period); it's called later by the scheduled-charge worker on the first successful charge.
 """
@@ -72,7 +72,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     OnboardingState,
     User,
     Organization,
@@ -80,7 +80,7 @@ from app.database import (
     KycDocument,
     ActionLog,
 )
-from app.services.identity import (
+from aurora_shared.services.identity import (
     create_organization,
     validate_tax_id_israel,
     normalize_tax_id,

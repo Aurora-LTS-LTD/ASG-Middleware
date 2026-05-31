@@ -6,7 +6,7 @@ Single-source publisher used by every service that wants to emit an
 operator-visible event to the CEO Executive Dashboard's Alert Stream.
 
 Contract:
-    from app.services.exec_events import publish_exec_event
+    from aurora_shared.services.exec_events import publish_exec_event
     publish_exec_event(
         db,
         kind="invoice_finalized",
@@ -44,7 +44,7 @@ from typing import Optional, List, Dict, Any
 
 from sqlalchemy.orm import Session
 
-from app.database.models import ExecEvent
+from aurora_shared.database.models import ExecEvent
 
 log = logging.getLogger(__name__)
 

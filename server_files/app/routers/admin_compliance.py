@@ -41,7 +41,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     get_db,
     User,
     AuditExportCursor,
@@ -49,7 +49,7 @@ from app.database import (
     Invoice,
     Receipt,
 )
-from app.middleware.auth_middleware import require_admin
+from aurora_shared.middleware.auth_middleware import require_admin
 from app.services.compliance import (
     build_dsar_bundle,
     export_audit_to_bigquery,

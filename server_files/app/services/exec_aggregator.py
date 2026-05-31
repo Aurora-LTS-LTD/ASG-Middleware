@@ -33,7 +33,7 @@ from typing import Dict, Any, List
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database.models import (
+from aurora_shared.database.models import (
     Invoice,
     Organization,
     Receipt,

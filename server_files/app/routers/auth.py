@@ -24,13 +24,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db, User
-from app.services.auth_service import (
+from aurora_shared.database import get_db, User
+from aurora_shared.services.auth_service import (
     hash_password,
     verify_password,
     create_access_token,
 )
-from app.middleware.auth_middleware import get_current_user, require_admin
+from aurora_shared.middleware.auth_middleware import get_current_user, require_admin
 
 
 # -----------------------------------------------------------------
@@ -157,11 +157,11 @@ def register(
       6. Return the user info (without password)
     """
     # Lazy import — avoid circular at module load
-    from app.services.identity import (
+    from aurora_shared.services.identity import (
         get_or_create_organization_for_business,
         add_membership,
     )
-    from app.database import Business
+    from aurora_shared.database import Business
 
     # ── Step 2: Check for duplicate email ──
     existing = db.query(User).filter(User.email == payload.email).first()

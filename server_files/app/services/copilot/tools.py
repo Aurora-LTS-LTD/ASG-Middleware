@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.schemas.category_dto import (
+from aurora_shared.schemas.category_dto import (
     CategoryAssignOrg,
     CategoryDelete,
     CategorySearch,
@@ -37,7 +37,7 @@ UpdateCategoryInput = CategoryUpdate
 DeleteCategoryInput = CategoryDelete
 AssignOrgInput = CategoryAssignOrg
 # Pre-refactor names kept as aliases so executor.py doesn't churn:
-from app.schemas.category_dto import (  # noqa: E402
+from aurora_shared.schemas.category_dto import (  # noqa: E402
     CategorySectorCreate as NewSectorInput,
     CategoryProfessionCreate as NewProfessionInput,
 )

@@ -33,8 +33,8 @@ import logging
 from fastapi import Request, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.database import get_db, User
-from app.services.auth_service import decode_access_token
+from aurora_shared.database import get_db, User
+from aurora_shared.services.auth_service import decode_access_token
 
 from jose import JWTError
 
@@ -137,7 +137,7 @@ def _try_resolve_oidc_admin(token: str, db: Session) -> User | None:
         return None
 
     try:
-        from app.services.auth_oidc import verify_google_oidc_token, OidcVerificationError
+        from aurora_shared.services.auth_oidc import verify_google_oidc_token, OidcVerificationError
         claims = verify_google_oidc_token(token, audience)
     except Exception as e:
         # Log both type AND message so we can diagnose audience/iss/sig/exp failures
@@ -188,7 +188,7 @@ def get_current_user(
     Add Depends(get_current_user) to any endpoint that needs protection.
 
     Accepts two token classes:
-      • Aurora HS256 JWTs (existing — minted by app.services.auth_service)
+      • Aurora HS256 JWTs (existing — minted by aurora_shared.services.auth_service)
       • Google RS256 OIDC tokens from allowlisted service accounts
         (Track 4 Phase A — service-to-service from aurora-admin-ui)
     """
@@ -387,7 +387,7 @@ def require_admin(
             raise HTTPException(status_code=403, detail="Break-glass token missing jti")
 
         # Lazy import to avoid module-load-time circular import risk.
-        from app.database.models import BreakGlassToken, ActionLog
+        from aurora_shared.database.models import BreakGlassToken, ActionLog
 
         token_row = (
             db.query(BreakGlassToken)
@@ -675,7 +675,7 @@ def require_org_access(min_role: str = "employee"):
             )
 
         # Lazy-import to avoid a circular dep between middleware and services.
-        from app.services.identity import user_can_access_org
+        from aurora_shared.services.identity import user_can_access_org
 
         if not user_can_access_org(
             current_user, org_id, db, min_role=min_role
@@ -792,7 +792,7 @@ def _resolve_native_session(request: Request, db: Session) -> "dict | None":
     # Confirm the device is still active. We re-check this on EVERY
     # request so revocations take effect immediately (rather than
     # waiting for the JWT to expire).
-    from app.database.models import NativeDeviceKey
+    from aurora_shared.database.models import NativeDeviceKey
     row = (
         db.query(NativeDeviceKey)
         .filter(NativeDeviceKey.device_id == device_id)

@@ -57,14 +57,14 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     get_db,
     User,
     Receipt,
     Expense,
     Organization,
 )
-from app.middleware.auth_middleware import (
+from aurora_shared.middleware.auth_middleware import (
     get_current_user,
     require_admin,
     require_org_access,
@@ -200,7 +200,7 @@ def _load_receipt_or_404(receipt_id: str, db: Session) -> Receipt:
 def _check_org_access(receipt: Receipt, current_user: User, db: Session,
                       *, min_role: str = "employee") -> None:
     """Receipt routes don't carry org_id in the path — verify access manually."""
-    from app.services.identity import user_can_access_org
+    from aurora_shared.services.identity import user_can_access_org
     if not user_can_access_org(current_user, receipt.organization_id, db, min_role=min_role):
         raise HTTPException(status_code=403, detail="Access denied to this receipt")
 

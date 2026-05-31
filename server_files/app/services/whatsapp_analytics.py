@@ -48,7 +48,7 @@ from typing import Dict, Any, List
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
 
-from app.database.models import WhatsAppOutboundLog, WhatsAppSession
+from aurora_shared.database.models import WhatsAppOutboundLog, WhatsAppSession
 
 log = logging.getLogger(__name__)
 

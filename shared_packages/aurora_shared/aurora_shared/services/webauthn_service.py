@@ -51,7 +51,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
-from app.database.models import WebauthnCredential, User
+from aurora_shared.database.models import WebauthnCredential, User
 
 log = logging.getLogger(__name__)
 
@@ -461,8 +461,8 @@ def require_step_up(action: str):
     dep is a no-op and returns 0 (no credential).
     """
     from fastapi import Depends, Header, HTTPException
-    from app.database import get_db
-    from app.middleware.auth_middleware import get_current_user
+    from aurora_shared.database import get_db
+    from aurora_shared.middleware.auth_middleware import get_current_user
 
     def _dep(
         x_aurora_step_up: Optional[str] = Header(default=None, alias="X-Aurora-Step-Up"),

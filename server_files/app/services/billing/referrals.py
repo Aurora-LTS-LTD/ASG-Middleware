@@ -13,7 +13,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import AccountantReferral, ActionLog
+from aurora_shared.database import AccountantReferral, ActionLog
 
 
 def record_referral(

@@ -28,8 +28,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import create_tables, get_db, Business, User, SessionLocal
-from app.middleware.auth_middleware import get_current_user, require_admin
+from aurora_shared.database import create_tables, get_db, Business, User, SessionLocal
+from aurora_shared.middleware.auth_middleware import get_current_user, require_admin
 from app.routers.whatsapp import router as whatsapp_router
 from app.routers.invoices import router as invoices_router
 from app.routers.auth import router as auth_router
@@ -382,7 +382,7 @@ async def startup():
         try:
             admin = db.query(User).filter(User.role == "admin").first()
             if not admin:
-                from app.services.auth_service import hash_password
+                from aurora_shared.services.auth_service import hash_password
                 admin = User(
                     email="admin@asg.com",
                     password_hash=hash_password("admin123"),
@@ -551,7 +551,7 @@ def create_business(
       existing keys, so existing dashboard JS continues to work.
     """
     # Lazy import to avoid a circular dependency at module load time.
-    from app.services.identity import (
+    from aurora_shared.services.identity import (
         get_or_create_organization_for_business,
         add_membership,
     )

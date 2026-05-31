@@ -87,8 +87,8 @@ def main() -> int:
 
     # Late imports — must come AFTER sys.path is set.
     try:
-        from app.database import SessionLocal, User, create_tables
-        from app.services.auth_service import hash_password
+        from aurora_shared.database import SessionLocal, User, create_tables
+        from aurora_shared.services.auth_service import hash_password
     except Exception as e:
         return _err(f"Import failed: {e}", 4)
 

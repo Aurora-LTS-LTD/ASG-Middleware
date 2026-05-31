@@ -45,7 +45,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from app.database import Invoice, User
+from aurora_shared.database import Invoice, User
 from app.services import whatsapp_meta_client as wa
 from app.services.invoice_service import (
     create_draft_invoice,
@@ -54,7 +54,7 @@ from app.services.invoice_service import (
 )
 from app.services.payment_service import get_business_balance, get_overdue_invoices
 from app.services.tax_compliance import calculate_vat, check_tax_compliance
-from app.services.whatsapp_identity import (
+from aurora_shared.services.whatsapp_identity import (
     clear_session_draft,
     get_or_create_session,
     get_user_by_whatsapp_phone,
@@ -71,14 +71,14 @@ from app.services.whatsapp_strings import (
 )
 
 # Sprint 1 ONBOARDING FSM dependencies
-from app.services.identity import (
+from aurora_shared.services.identity import (
     create_organization,
     create_invitation,
     validate_tax_id_israel,
     normalize_tax_id,
     infer_legal_structure_from_tax_id,
 )
-from app.services.auth_service import hash_password
+from aurora_shared.services.auth_service import hash_password
 
 
 # ─────────────────────────────────────────────────────────────
@@ -686,7 +686,7 @@ async def _finalize_wa_onboarding(phone, session, lang, db):
 
     # If somehow this email is taken (very unlikely — same phone re-running
     # post-cancel), append a uuid suffix so we never collide.
-    from app.database import User as _UserModel
+    from aurora_shared.database import User as _UserModel
     if db.query(_UserModel).filter(_UserModel.email == synthetic_email).first():
         synthetic_email = f"wa{phone_clean}-{_u.uuid4().hex[:6]}@aurora-ltd.co.il"
 
@@ -1365,11 +1365,11 @@ async def _handle_receipt_image(parsed: dict, phone: str, user: User, lang: str,
 
     # Resolve the user's primary organization. We use the legacy Business
     # paired Organization (post-S1.8 dual-write keeps these in sync).
-    from app.database import Organization
+    from aurora_shared.database import Organization
     org = db.query(Organization).filter(Organization.legacy_business_id == user.business_id).first()
     if not org:
         # Last-ditch backfill via the Sprint 1.8 helper
-        from app.services.identity import get_or_create_organization_for_business
+        from aurora_shared.services.identity import get_or_create_organization_for_business
         org = get_or_create_organization_for_business(user.business_id, db)
         db.commit()
 
@@ -1615,7 +1615,7 @@ async def _flow_receipt_review_heavy(parsed: dict, phone: str, user: User, lang:
         return
 
     # Update the Expense with the corrected amount + confirm it
-    from app.database import Expense
+    from aurora_shared.database import Expense
     expense = db.query(Expense).filter(Expense.id == expense_id).first()
     if not expense:
         clear_session_draft(phone, db)

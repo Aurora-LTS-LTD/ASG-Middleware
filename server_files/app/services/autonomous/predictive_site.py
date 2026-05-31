@@ -42,7 +42,7 @@ class PredictiveSiteService(AbstractAutonomousService):
     async def _run_active(
         self, payload: dict, db: "Session"
     ) -> AutonomousResult:
-        from app.database.models import Invoice, Receipt, Organization
+        from aurora_shared.database.models import Invoice, Receipt, Organization
 
         org_id = int(payload["organization_id"])
         project_external_id = payload.get("project_external_id")

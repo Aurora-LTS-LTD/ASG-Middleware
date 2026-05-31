@@ -24,7 +24,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     Business,
     Organization,
     Membership,
@@ -32,7 +32,7 @@ from app.database import (
     User,
     ActionLog,
 )
-from app.services.identity.tax_id import (
+from aurora_shared.services.identity.tax_id import (
     validate_tax_id_israel,
     normalize_tax_id,
     infer_legal_structure_from_tax_id,

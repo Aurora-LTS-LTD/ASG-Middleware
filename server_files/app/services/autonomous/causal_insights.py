@@ -42,7 +42,7 @@ class CausalInsightsService(AbstractAutonomousService):
     async def _run_active(
         self, payload: dict, db: "Session"
     ) -> AutonomousResult:
-        from app.database.models import CausalInsight
+        from aurora_shared.database.models import CausalInsight
 
         org_id = int(payload["organization_id"])
         project_external_id = payload.get("project_external_id")

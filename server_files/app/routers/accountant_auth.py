@@ -49,8 +49,8 @@ from sqlalchemy.orm import Session
 
 from jose import jwt as jose_jwt
 
-from app.database import get_db
-from app.database.models import (
+from aurora_shared.database import get_db
+from aurora_shared.database.models import (
     User,
     AccountantDevice,
     AccountantRefreshToken,

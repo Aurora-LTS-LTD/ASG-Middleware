@@ -9,7 +9,7 @@ a verified claim dict that `require_admin` can authorise on.
 
 USAGE (from app/middleware/auth_middleware.py):
 
-    from app.services.auth_oidc import verify_google_oidc_token
+    from aurora_shared.services.auth_oidc import verify_google_oidc_token
     claims = verify_google_oidc_token(token, expected_audience="https://api-aurora-lts.com")
     email = claims["email"]  # already lowercased + verified
 

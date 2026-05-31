@@ -33,7 +33,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
-from app.database import (
+from aurora_shared.database import (
     get_db, User, VerticalTemplate, ExecEvent,
     BusinessCategory, Organization,
     CopilotConversation, CopilotMessage, CopilotProvisioningRun, ClaudeApiUsage,
@@ -42,10 +42,10 @@ from app.database import (
     ProjectConstraint, HcarlPolicyState, CausalInsight,
     FederatedSyncLog, GrowthMilestone,
 )
-from app.middleware.auth_middleware import require_admin
+from aurora_shared.middleware.auth_middleware import require_admin
 from app.services.exec_aggregator import build_dashboard_summary, build_finance_summary
 from app.services.whatsapp_analytics import get_whatsapp_analytics
-from app.services.exec_events import publish_exec_event, recent_events_since
+from aurora_shared.services.exec_events import publish_exec_event, recent_events_since
 
 log = logging.getLogger(__name__)
 
@@ -369,7 +369,7 @@ def _serialize_category(c: BusinessCategory, org_count: int = 0) -> dict:
 # discriminator required); the handler infers level from parent_id.
 # The Copilot tools (copilot/tools.py) use the discriminated-union
 # variant directly so Claude's tool schema is strict.
-from app.schemas.category_dto import (
+from aurora_shared.schemas.category_dto import (
     CategoryCore,
     CategoryPatch,           # canonical PATCH shape, exported as-is
     CategoryAssignOrg,       # canonical assign-org shape
@@ -384,7 +384,7 @@ class CategoryCreate(CategoryCore):
       • parent_id=<id>  → creates an L2 profession under that sector
 
     Internally the handler picks the appropriate canonical DTO from
-    `app.schemas.category_dto` based on `parent_id`.
+    `aurora_shared.schemas.category_dto` based on `parent_id`.
     """
     parent_id: Optional[int] = None
 
@@ -867,7 +867,7 @@ class WebauthnAssertFinishBody(BaseModel):
 def webauthn_register_start(
     current_user: User = Depends(require_admin),
 ) -> dict:
-    from app.services.webauthn_service import begin_registration, WebauthnError
+    from aurora_shared.services.webauthn_service import begin_registration, WebauthnError
     try:
         options = begin_registration(current_user)
         return {"ok": True, "options": options}
@@ -881,7 +881,7 @@ def webauthn_register_finish(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    from app.services.webauthn_service import finish_registration, WebauthnError
+    from aurora_shared.services.webauthn_service import finish_registration, WebauthnError
     try:
         cred = finish_registration(
             user=current_user,
@@ -916,7 +916,7 @@ def webauthn_assert_start(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    from app.services.webauthn_service import begin_assertion, WebauthnError
+    from aurora_shared.services.webauthn_service import begin_assertion, WebauthnError
     try:
         options = begin_assertion(current_user, action, db)
         return {"ok": True, "action": action, "options": options}
@@ -930,7 +930,7 @@ def webauthn_assert_finish(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    from app.services.webauthn_service import finish_assertion, WebauthnError
+    from aurora_shared.services.webauthn_service import finish_assertion, WebauthnError
     try:
         token, cred_id = finish_assertion(
             user=current_user,
@@ -963,7 +963,7 @@ def webauthn_list_credentials(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    from app.database.models import WebauthnCredential
+    from aurora_shared.database.models import WebauthnCredential
     rows = (
         db.query(WebauthnCredential)
         .filter(WebauthnCredential.user_id == current_user.id)
@@ -1003,7 +1003,7 @@ def webauthn_preflight(
     db: Session = Depends(get_db),
 ) -> dict:
     import os as _os
-    from app.database.models import WebauthnCredential
+    from aurora_shared.database.models import WebauthnCredential
 
     rp_id = (_os.getenv("AURORA_WEBAUTHN_RP_ID") or "console.api-aurora-lts.com").strip()
     # Multi-origin support (Appendix K §1B Layer 2)
@@ -1400,7 +1400,7 @@ from app.config.feature_flags import (
     feature_display_meta,
     get_threshold,
 )
-from app.services.webauthn_service import require_step_up
+from aurora_shared.services.webauthn_service import require_step_up
 
 
 def _compute_growth_summary(db: Session) -> dict:
@@ -1412,7 +1412,7 @@ def _compute_growth_summary(db: Session) -> dict:
     DEFENSIVE: any individual count failure → 0 for that metric.
     """
     from sqlalchemy import func as _f
-    from app.database.models import WhatsAppSession, Invoice
+    from aurora_shared.database.models import WhatsAppSession, Invoice
 
     def _safe_count(q) -> int:
         try:

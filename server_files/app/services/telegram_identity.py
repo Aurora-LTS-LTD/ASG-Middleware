@@ -38,7 +38,7 @@ import random
 
 from sqlalchemy.orm import Session
 
-from app.database import User, TelegramSession
+from aurora_shared.database import User, TelegramSession
 
 # Pairing code is valid for this many minutes
 PAIRING_CODE_TTL_MINUTES = 10

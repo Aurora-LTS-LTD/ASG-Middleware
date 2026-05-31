@@ -43,7 +43,7 @@ from typing import List, Tuple
 
 from sqlalchemy.orm import Session
 
-from app.database import (
+from aurora_shared.database import (
     Organization,
     Invoice,
     Payment,
