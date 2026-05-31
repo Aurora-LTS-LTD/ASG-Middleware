@@ -7,16 +7,16 @@ database models as the tax/compliance server (aurora-api-tax) via
 `app.database` — there is exactly one schema, so there is no drift.
 
 WHAT THIS SERVER MOUNTS:
-  • admin_exec        — Executive Dashboard router that CONTAINS the Gemini
-                        Copilot endpoints (/api/v1/admin/exec/copilot/*).
-                        NOTE: Copilot is NOT a standalone router — it is
-                        embedded in admin_exec.py alongside the FULL exec
-                        dashboard, so mounting "the Copilot" mounts the entire
-                        exec/admin surface. Extract it for a truly lean core.
-  • native_shell      — Aurora Mac Shell hardware-binding handshake + revoke.
-  • admin_break_glass — emergency break-glass token list/revoke (IAP-strict).
-  • auth              — shared token verify/refresh (infra; removable if every
-                        token is minted by aurora-api-tax).
+  • copilot      — Gemini Copilot console (conversations / SSE chat / approve /
+                   usage / budget), extracted from admin_exec into its own
+                   routers/copilot.py. URL prefix preserved: /api/v1/admin/exec/copilot/*.
+  • native_shell — Aurora Mac Shell hardware-binding handshake + device revoke.
+
+NOT mounted here (per the operational-core split):
+  • admin_exec (exec telemetry / charts) → now served on aurora-api-tax (M1),
+    since it reads tax / financial / WhatsApp data and is fully copilot-free.
+  • auth / admin_break_glass → live on aurora-api-tax (M1). M2 trusts the shared
+    JWT secret, so M1-minted tokens authenticate here via the auth middleware.
 
 WHAT THIS SERVER DOES **NOT** DO:
   It does NOT disable the production-readiness check. The original brief
@@ -39,10 +39,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_tables
-from app.routers.admin_exec import router as admin_exec_router               # Model 2 — Gemini Copilot lives here (whole exec dashboard)
-from app.routers.native_shell import router as native_shell_router           # Model 2 — Aurora Mac Shell hardware-binding handshake
-from app.routers.admin_break_glass import router as admin_break_glass_router # Model 2 (moved) — emergency token list/revoke (IAP-strict)
-from app.routers.auth import router as auth_router                           # shared infra — token verify/refresh (removable)
+from app.routers.copilot import router as copilot_router                     # M2 — Gemini Copilot console (extracted from admin_exec)
+from app.routers.native_shell import router as native_shell_router           # M2 — Aurora Mac Shell hardware-binding handshake
 
 load_dotenv()
 
@@ -108,10 +106,8 @@ app.add_middleware(
     max_age=600,
 )
 
-app.include_router(auth_router)                  # kept: token verify/refresh; drop if tokens are only minted by aurora-api-tax
+app.include_router(copilot_router)               # M2 — Copilot conversations / chat / approve / usage / budget
 app.include_router(native_shell_router)          # Aurora Mac Shell handshake + device revoke
-app.include_router(admin_break_glass_router)     # emergency break-glass token list/revoke (IAP-strict)
-app.include_router(admin_exec_router)            # CEO Executive Dashboard + embedded Gemini Copilot
 
 
 @app.on_event("startup")
