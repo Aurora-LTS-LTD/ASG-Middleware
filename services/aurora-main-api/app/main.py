@@ -487,7 +487,8 @@ def health_check():
 # NOTE: until the Phase-4 Dockerfile COPYs front-end/ceo-dashboard into the M1
 # image (or sets CEO_DASHBOARD_DIR), a rebuilt M1 container will 404 these pages.
 _CEO_DASHBOARD_DIR = os.getenv("CEO_DASHBOARD_DIR") or os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "front-end", "ceo-dashboard")
+    # services/aurora-main-api/app/main.py -> repo root is three levels up.
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "front-end", "ceo-dashboard")
 )
 
 
