@@ -44,7 +44,7 @@ substitutions:
   _IMAGE:             api
   _VERSION:           v0.0.0          # override via --substitutions=_VERSION=vX.Y.Z
   _SERVICE:           aurora-api
-  _MIGRATE_JOB:       aurora-migrate  # Cloud Run Job for Alembic upgrade head
+  _MIGRATE_JOB:       aurora-api-db-setup  # Cloud Run Job for `python -m app.db_setup`
   _STABLE_TAG:        stable          # revision tag written on success
   _SMOKE_PATH:        /api/v1/onboarding/health
 
@@ -61,6 +61,8 @@ steps:
     name: gcr.io/cloud-builders/docker
     args:
       - build
+      - "-f"
+      - "services/aurora-main-api/Dockerfile"
       - "--tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}"
       - "--tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest"
       - "--label=git.commit=${COMMIT_SHA}"
