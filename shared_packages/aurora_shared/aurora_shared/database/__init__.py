@@ -6,7 +6,7 @@ Instead of:  from aurora_shared.database.connection import SessionLocal
 You can do:  from aurora_shared.database import SessionLocal
 """
 
-from aurora_shared.database.connection import engine, SessionLocal, Base, get_db, create_tables
+from aurora_shared.database.connection import engine, SessionLocal, Base, get_db, create_tables, get_engine
 from aurora_shared.database.models import (
     Business,
     Invoice,
