@@ -31,12 +31,14 @@ WHAT THIS SERVER DOES **NOT** DO:
   service that points at the production DATABASE_URL.
 """
 
+import asyncio
 import datetime
 import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app.database import create_tables
 from app.routers.copilot import router as copilot_router                     # M2 — Gemini Copilot console (extracted from admin_exec)
@@ -110,13 +112,63 @@ app.include_router(copilot_router)               # M2 — Copilot conversations 
 app.include_router(native_shell_router)          # Aurora Mac Shell handshake + device revoke
 
 
+# ─────────────────────────────────────────────────────────────
+# RESILIENT DB BOOTSTRAP — survive the Cloud SQL socket race
+# ─────────────────────────────────────────────────────────────
+# On Cloud Run with --add-cloudsql-instances, the unix socket at
+# /cloudsql/<conn>/.s.PGSQL.5432 is bound by a sidecar that may not be
+# ready the instant the worker boots — so create_tables() at startup can
+# hit "Connection refused" and kill the worker (→ crash loop → 503),
+# especially with --min-instances 0 where every cold start re-runs this.
+#
+# Fix: retry with backoff. NON-FATAL after exhausting attempts — M1
+# (aurora-api-tax) owns schema creation, so the tables already exist; the
+# worker should boot and keep /health + non-DB paths up rather than
+# crash-loop. (Mirrors M1's non-fatal startup-migration pattern.)
+DB_BOOT_MAX_ATTEMPTS = int(os.getenv("CORE_DB_BOOT_MAX_ATTEMPTS", "10"))
+DB_BOOT_BASE_DELAY_S = float(os.getenv("CORE_DB_BOOT_BASE_DELAY_S", "1.5"))
+DB_BOOT_MAX_DELAY_S = float(os.getenv("CORE_DB_BOOT_MAX_DELAY_S", "5"))
+
+
+async def _ensure_tables_resilient() -> bool:
+    """create_tables() with backoff; returns True on success, False if the
+    DB stayed unreachable through all attempts (boot continues either way)."""
+    last_err: Exception | None = None
+    for attempt in range(1, DB_BOOT_MAX_ATTEMPTS + 1):
+        try:
+            create_tables()
+            if attempt > 1:
+                print(f"[CORE] DB reachable after {attempt} attempt(s)")
+            return True
+        except (OperationalError, InterfaceError) as e:
+            last_err = e
+            head = str(e).splitlines()[0][:160]
+            if attempt < DB_BOOT_MAX_ATTEMPTS:
+                delay = min(DB_BOOT_BASE_DELAY_S * attempt, DB_BOOT_MAX_DELAY_S)
+                print(
+                    f"[CORE][WARN] DB not ready (attempt {attempt}/{DB_BOOT_MAX_ATTEMPTS}): "
+                    f"{head} — retrying in {delay:.1f}s"
+                )
+                await asyncio.sleep(delay)   # no sleep after the final attempt
+            else:
+                print(
+                    f"[CORE][WARN] DB not ready (final attempt {attempt}/{DB_BOOT_MAX_ATTEMPTS}): {head}"
+                )
+    head = str(last_err).splitlines()[0][:160] if last_err else "unknown"
+    print(
+        f"[CORE][ERROR] DB unreachable after {DB_BOOT_MAX_ATTEMPTS} attempts; "
+        f"booting anyway (M1 owns the schema). Last error: {head}"
+    )
+    return False
+
+
 @app.on_event("startup")
 async def startup():
     print("=" * 50)
     print("  Aurora LTS — Operational Core (aurora-api-core)")
     print("=" * 50)
     validate_backend_selectors()   # fail closed before we touch the shared DB
-    create_tables()
+    await _ensure_tables_resilient()
     print("[CORE] ready")
 
 

@@ -1,0 +1,59 @@
+# =====================================================================
+# Aurora LTS — M2 Operational Core image build (aurora-api-core)
+# =====================================================================
+# Sibling of cloudbuild.yaml. The ONLY differences from the M1 pipeline:
+#   • builds Dockerfile.core (entrypoint app.main_core:app), not Dockerfile
+#   • pushes to repo image  ${_REPO}/${_IMAGE}  with _IMAGE=api-core
+#
+# Why a config (not `gcloud builds submit --tag`): `--tag` builds the
+# default root Dockerfile (M1's app.main:app) and ignores --substitutions,
+# so it CANNOT build Dockerfile.core. This config can.
+#
+# Trigger:
+#   gcloud builds submit --config cloudbuild.core.yaml \
+#       --substitutions=_VERSION=v0.1.0 .
+# =====================================================================
+
+substitutions:
+  _REGION:   me-west1
+  _PROJECT:  aurora-lts-prod
+  _REPO:     aurora
+  _IMAGE:    api-core           # M2 core image (vs M1's "api")
+  _VERSION:  v0.1.3             # bump per release; pass via --substitutions
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # ── 1. Build the M2 core image from Dockerfile.core ──
+  - id: docker-build-core
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=Dockerfile.core
+      - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
+      - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
+      - --label=git.commit=${COMMIT_SHA}
+      - --label=git.branch=${BRANCH_NAME}
+      - --label=build.id=${BUILD_ID}
+      - .
+
+  # ── 2. Push both tags to Artifact Registry ──
+  - id: docker-push-versioned
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
+
+  - id: docker-push-latest
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
+
+images:
+  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
+  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
+
+timeout: 1200s   # 20 min — WeasyPrint + anthropic/jiter wheels on first build
