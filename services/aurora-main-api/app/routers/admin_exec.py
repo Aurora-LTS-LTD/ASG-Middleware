@@ -41,6 +41,8 @@ from aurora_shared.database import (
     # Sprint 5 / Appendix M — Pre-Armed Autonomous Architecture
     ProjectConstraint, HcarlPolicyState, CausalInsight,
     FederatedSyncLog, GrowthMilestone,
+    # Sprint 8.2.5 — Accountant seed endpoint dependencies
+    AccountantEngagement, ActionLog,
 )
 from aurora_shared.middleware.auth_middleware import require_admin
 from app.services.exec_aggregator import build_dashboard_summary, build_finance_summary
@@ -1694,3 +1696,211 @@ def growth_activate_endpoint(
         "current_value": current_value,
         "threshold_value": row.threshold_value,
     }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# Sprint 8.2.5 — Accountant Seed Endpoint
+# ═════════════════════════════════════════════════════════════════════
+#
+# POST /api/v1/admin/exec/seed/accountant
+#   Provisions a brand-new external accountant by creating:
+#     1. User row     (role="accountant", is_active=True)
+#     2. AccountantEngagement row mapping the new user to an
+#        organization with status="active"
+#     3. ActionLog audit entry with full actor + target detail
+#
+# SECURITY POSTURE:
+#   • require_admin                — IAP-gated CEO/admin only
+#   • require_step_up("seed_accountant") — WebAuthn (Touch ID / passkey)
+#     just-in-time approval per call, since this provisions a fresh
+#     user with system-level access to a tenant's books.
+#
+# PASSWORD HANDLING:
+#   The accountant logs in via OTP-only (see accountant_auth.py).
+#   We MUST still populate `password_hash` (NOT NULL on `users`), so
+#   we bcrypt-hash a thrown-away cryptographic token. Result: no
+#   plaintext can ever match this hash. The accountant gets in via
+#   email OTP exclusively.
+# ═════════════════════════════════════════════════════════════════════
+
+import secrets as _secrets_acct
+from app.services.auth_service import hash_password as _hash_password_acct
+
+
+class AccountantSeedRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254,
+                       description="Accountant's professional email — used as the OTP recipient.")
+    name: str = Field(..., min_length=1, max_length=120,
+                      description="Display name (firma legal name or CPA full name).")
+    organization_id: int = Field(..., gt=0,
+                                 description="Organization the accountant is engaged to advise.")
+
+
+class AccountantSeedResponse(BaseModel):
+    ok: bool
+    user_id: int
+    engagement_id: int
+    email: str
+    organization_id: int
+    organization_display_name: str
+    seeded_by_user_id: int
+    step_up_credential_id: int
+    seeded_at: str
+
+
+@router.post(
+    "/seed/accountant",
+    response_model=AccountantSeedResponse,
+    summary="Seed a new external accountant + engagement (CEO step-up gated)",
+)
+def seed_accountant_endpoint(
+    payload: AccountantSeedRequest,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    step_up_credential_id: int = Depends(require_step_up("seed_accountant")),
+    db: Session = Depends(get_db),
+) -> AccountantSeedResponse:
+    """
+    Provision a new accountant user + engagement in a single atomic
+    transaction. Idempotent only against unique-email duplication —
+    raises HTTP 400 `user_exists` if the email is already in use.
+
+    All three writes (User, AccountantEngagement, ActionLog) commit
+    together so we never end up with a half-seeded accountant.
+    """
+    email_norm = payload.email.strip().lower()
+    name_norm = payload.name.strip()
+
+    # 1. Pre-check: email must not already exist (anti-clobber).
+    existing = db.query(User).filter(User.email == email_norm).first()
+    if existing is not None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "user_exists",
+                "message": f"A user with email {email_norm} already exists "
+                           f"(id={existing.id}, role={existing.role}).",
+            },
+        )
+
+    # 2. Verify the target organization exists.
+    org = (
+        db.query(Organization)
+        .filter(Organization.id == payload.organization_id)
+        .first()
+    )
+    if org is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "organization_not_found",
+                "message": f"Organization {payload.organization_id} does not exist.",
+            },
+        )
+
+    # 3. Create the accountant User. Password is a thrown-away bcrypt
+    #    hash — accountants authenticate via email OTP only.
+    placeholder_secret = _secrets_acct.token_urlsafe(48)
+    unguessable_hash = _hash_password_acct(placeholder_secret)
+    del placeholder_secret  # explicit drop; nothing logs it
+
+    new_user = User(
+        email=email_norm,
+        password_hash=unguessable_hash,
+        full_name=name_norm,
+        role="accountant",
+        is_active=True,
+        language_pref="he",   # default Hebrew for IL CPAs; user can change later
+        onboarding_status="active",  # admin-seeded users skip onboarding
+    )
+    db.add(new_user)
+    db.flush()  # populate new_user.id without committing
+
+    # 4. Create the active AccountantEngagement.
+    now_utc = datetime.datetime.utcnow()
+    engagement = AccountantEngagement(
+        accountant_user_id=new_user.id,
+        organization_id=payload.organization_id,
+        status="active",
+        invited_at=now_utc,
+        activated_at=now_utc,
+        revenue_share_pct=20.0,  # platform default; overridable later
+    )
+    db.add(engagement)
+    db.flush()
+
+    # 5. Audit trail — capture actor, action, target metadata.
+    audit_payload = {
+        "action": "seed_accountant",
+        "actor_user_id": current_user.id,
+        "actor_email": current_user.email,
+        "step_up_credential_id": step_up_credential_id,
+        "target_user_id": new_user.id,
+        "target_email": email_norm,
+        "target_display_name": name_norm,
+        "target_organization_id": payload.organization_id,
+        "target_organization_display_name": org.display_name,
+        "engagement_id": engagement.id,
+        "client_ip_hint": (request.client.host if request.client else None),
+        "timestamp_utc": now_utc.isoformat(),
+    }
+    action_log = ActionLog(
+        business_id=None,  # operates at organization-level, not legacy business
+        status="seed_accountant",
+        detail=_json.dumps(audit_payload, ensure_ascii=False, separators=(",", ":")),
+        triggered_at=now_utc,
+    )
+    db.add(action_log)
+
+    # 6. Atomic commit. If anything fails, rollback everything — we
+    #    never want an orphan User without its engagement.
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        log.exception("[SEED_ACCOUNTANT] commit failed for email=%s", email_norm)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "seed_commit_failed",
+                "message": f"{type(e).__name__}: {str(e)[:160]}",
+            },
+        ) from e
+
+    db.refresh(new_user)
+    db.refresh(engagement)
+
+    # 7. Operational visibility — surface in ExecEvent feed (best-effort).
+    try:
+        publish_exec_event(
+            db,
+            kind="accountant_seeded",
+            severity="info",
+            title=f"Accountant provisioned: {name_norm} ({email_norm})",
+            detail=(
+                f"engagement_id={engagement.id} "
+                f"organization_id={payload.organization_id} "
+                f"actor_user_id={current_user.id} "
+                f"step_up_credential_id={step_up_credential_id}"
+            ),
+            related_entity_type="accountant_engagement",
+            related_entity_id=engagement.id,
+        )
+    except Exception:
+        # Audit log already persisted — ExecEvent is best-effort observability.
+        log.warning(
+            "[SEED_ACCOUNTANT] ExecEvent publish failed (non-fatal) for user_id=%d",
+            new_user.id,
+        )
+
+    return AccountantSeedResponse(
+        ok=True,
+        user_id=new_user.id,
+        engagement_id=engagement.id,
+        email=email_norm,
+        organization_id=payload.organization_id,
+        organization_display_name=org.display_name,
+        seeded_by_user_id=current_user.id,
+        step_up_credential_id=step_up_credential_id,
+        seeded_at=now_utc.isoformat(),
+    )

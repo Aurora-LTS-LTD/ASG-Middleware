@@ -58,6 +58,9 @@ from aurora_shared.database.models import (
     AccountantEngagement,
     ActionLog,
 )
+from app.middleware.auth_middleware import require_accountant  # noqa: F401 — re-exported for Vault router
+from app.middleware.rate_limit import limiter
+from app.services import sendgrid_client
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +105,7 @@ def _validate_email_shape(value: str) -> str:
 
 class OtpSendRequest(BaseModel):
     email: str = Field(..., min_length=3, max_length=254)
+    delivery_method: str = Field(default="email", pattern=r"^(email|whatsapp)$")
 
     @field_validator("email")
     @classmethod
@@ -289,34 +293,70 @@ def _issue_access_token(user_id: int, email: str, device_id: int) -> tuple[str, 
     return jose_jwt.encode(payload, _signing_key(), algorithm=JWT_ALGO), expires
 
 
-def _send_otp_to_user(email: str, otp: str, method: str) -> None:
+def _send_otp_to_user(email: str, otp: str, method: str, phone_e164: str = "") -> None:
     """
-    Dispatch OTP to the user. Stub-aware: in production this calls
-    SendGrid (email) or whatsapp_meta_client (whatsapp). For now we
-    log it loud so it's visible in Cloud Run logs during dev.
+    Dispatch a 6-digit OTP via email (SendGrid) or WhatsApp (Meta Graph API).
 
-    Production hook: replace these print() calls with the real send
-    methods. Note: the OTP itself is logged ONLY here, never elsewhere.
+    Stub mode (OTP_BACKEND=stub or unset): logs the OTP to Cloud Run logs
+    so developers can read it without real credentials configured.
+    Production mode (OTP_BACKEND=production): calls the real send functions.
+
+    The OTP value is ONLY logged in stub mode — never in production.
     """
     backend = (os.getenv("OTP_BACKEND") or "stub").lower()
-    if backend == "stub" or backend == "":
-        # Stub mode — log the OTP so a dev can read it from Cloud Run logs.
-        # NOT secure for production; flip OTP_BACKEND=production to suppress.
+
+    if backend != "production":
         log.warning(
-            "[OTP_STUB] DEV-MODE OTP for %s via %s: %s (60s TTL)",
+            "[OTP_STUB] DEV-MODE OTP for %s via %s: %s (60s TTL) "
+            "— set OTP_BACKEND=production to suppress",
             email, method, otp,
         )
         print(f"🔐 [OTP DEV] {email} → {otp}", flush=True)
         return
 
-    if method == "email":
-        # TODO Sprint 8.2.1 — wire SendGrid client here.
-        log.warning("[OTP] Email send not yet wired in production: %s", email)
-        print(f"🔐 [OTP PROD-EMAIL TODO] {email} → {otp}", flush=True)
-    elif method == "whatsapp":
-        # TODO Sprint 8.2.1 — wire whatsapp_meta_client.send_template here.
-        log.warning("[OTP] WhatsApp send not yet wired in production: %s", email)
-        print(f"🔐 [OTP PROD-WA TODO] {email} → {otp}", flush=True)
+    try:
+        if method == "whatsapp" and phone_e164:
+            sendgrid_client.send_whatsapp_otp(phone_e164, otp)
+        else:
+            sendgrid_client.send_otp(email, otp)
+    except RuntimeError as exc:
+        log.error("[OTP] delivery failed method=%s email=%s: %s", method, email, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "otp_delivery_failed",
+                "message": "Could not deliver your verification code. Please try again.",
+            },
+        ) from exc
+
+
+def _send_new_device_alert(user: User, device_row: "AccountantDevice") -> None:
+    """
+    Fire-and-forget email to the accountant when a new device enrolls.
+    Runs AFTER db.commit() so it never blocks token issuance.
+    Swallows errors — a failed alert must not break the login flow.
+    """
+    backend = (os.getenv("OTP_BACKEND") or "stub").lower()
+    if backend != "production":
+        log.info(
+            "[NEW_DEVICE_STUB] would alert %s about new device_id=%s platform=%s",
+            user.email, device_row.id, device_row.platform,
+        )
+        return
+
+    name = f"{getattr(user, 'first_name', '') or ''} {getattr(user, 'last_name', '') or ''}".strip() or user.email
+    revoke_url = f"https://portal.api-aurora-lts.com/devices"  # accountant signs in + revokes from devices page
+    try:
+        sendgrid_client.send_new_device_alert(
+            to_email=user.email,
+            accountant_name=name,
+            platform=device_row.platform or "unknown",
+            device_label=device_row.device_label or "Unknown device",
+            enrolled_at_iso=_iso(device_row.enrolled_at),
+            revoke_url=revoke_url,
+        )
+    except Exception as exc:
+        log.error("[new_device_alert] failed for user_id=%s: %s", user.id, exc)
 
 
 def _resolve_accountant(db: Session, email: str) -> Optional[User]:
@@ -391,6 +431,7 @@ def _enforce_rate_limit(db: Session, email: str, ip_hash: str) -> None:
 # ─────────────────────────────────────────────────────────────
 
 @router.post("/otp/send", response_model=OtpSendResponse)
+@limiter.limit("5/minute")
 def otp_send(
     body: OtpSendRequest,
     request: Request,
@@ -411,7 +452,11 @@ def otp_send(
 
     # 3. Generate + persist (regardless of user existence — see above)
     otp = _generate_otp()
-    method = "email"  # WhatsApp routing in Sprint 8.2.1
+    # Determine delivery channel: respect client preference, but fall back to
+    # email if the user has no WhatsApp phone number on file.
+    requested_method = body.delivery_method if hasattr(body, "delivery_method") else "email"
+    phone_e164 = (getattr(user, "whatsapp_phone_e164", None) or "") if user else ""
+    method = "whatsapp" if (requested_method == "whatsapp" and phone_e164) else "email"
 
     if user:
         otp_hash = _sha256_hex(otp)
@@ -432,7 +477,7 @@ def otp_send(
             log.error("[otp/send] commit failed: %s", e)
             raise HTTPException(500, detail={"error": "db_commit_failed"})
 
-        _send_otp_to_user(email, otp, method)
+        _send_otp_to_user(email, otp, method, phone_e164=phone_e164)
         log.info("[otp/send] sent OTP to user_id=%s (method=%s)", user.id, method)
     else:
         # Anti-enumeration — log internally but respond with same shape
@@ -623,6 +668,9 @@ def otp_verify(
         "[otp/verify] user_id=%s device_id=%s is_new=%s",
         user.id, device_row.id, is_new_device,
     )
+
+    if is_new_device:
+        _send_new_device_alert(user, device_row)
 
     response.headers["Cache-Control"] = "no-store"
     return OtpVerifyResponse(
@@ -863,11 +911,11 @@ def _require_accountant_jwt(request: Request, db: Session) -> tuple[User, int]:
 
 @router.get("/devices", response_model=DeviceListResponse)
 def list_devices(
-    request: Request,
     db: Session = Depends(get_db),
+    auth: tuple = Depends(require_accountant),
 ):
     """List accountant's currently bound devices, newest first."""
-    user, current_device_id = _require_accountant_jwt(request, db)
+    user, current_device_id = auth
 
     rows = (
         db.query(AccountantDevice)
@@ -899,11 +947,11 @@ def list_devices(
 def revoke_device(
     device_id: int,
     body: DeviceRevokeRequest,
-    request: Request,
     db: Session = Depends(get_db),
+    auth: tuple = Depends(require_accountant),
 ):
     """Soft-delete device + revoke all its refresh tokens."""
-    user, _current = _require_accountant_jwt(request, db)
+    user, _current = auth
 
     dev = (
         db.query(AccountantDevice)
@@ -956,11 +1004,11 @@ def revoke_device(
 def relabel_device(
     device_id: int,
     body: DeviceRelabelRequest,
-    request: Request,
     db: Session = Depends(get_db),
+    auth: tuple = Depends(require_accountant),
 ):
     """Rename a device. Audit-logged."""
-    user, _current = _require_accountant_jwt(request, db)
+    user, _current = auth
 
     dev = (
         db.query(AccountantDevice)

@@ -33,7 +33,10 @@ from sqlalchemy import (
     Index,          # Named index for faster lookups
     LargeBinary,    # Raw bytes (challenge_bytes for native shell handshake — Sprint 8.2)
     text as sa_text,  # Raw SQL fragment — used for partial-index WHERE clauses
+    JSON,           # Cross-dialect JSON — falls back to TEXT on SQLite
+    CheckConstraint, # Sprint 8.3 — 7-year retention + soft-delete invariants
 )
+from sqlalchemy.dialects.postgresql import JSONB  # Sprint 8.3 — JSONB on Postgres
 from sqlalchemy.orm import relationship  # Defines connections between tables
 
 from aurora_shared.database.connection import Base  # The base class all models inherit from
@@ -152,6 +155,18 @@ class Invoice(Base):
     pdf_url = Column(String, nullable=True)          # Link to PDF (future)
     status = Column(String, default="draft")         # draft/finalized/sent/cancelled
     description = Column(String, nullable=True)      # Optional note
+
+    # ── P2-05: Credit note discriminator ──
+    # kind="standard"     → a normal invoice (default).
+    # kind="credit_note"  → a חשבונית זיכוי that REFERENCES the original
+    #                        invoice via original_invoice_id. Its
+    #                        amount_net/vat/total are NEGATIVE, so the
+    #                        existing VAT report + ITA allocation flow
+    #                        already nets them out without special-casing.
+    kind = Column(String(16), default="standard", nullable=False, index=True)
+    original_invoice_id = Column(
+        Integer, ForeignKey("invoices.id"), nullable=True, index=True,
+    )
 
     # ── Appendix I Sprint 2 — 7-year compliance archive ──
     # Path inside gs://aurora-pdfs-prod/ (e.g., "invoices/2026/05/INV-00042.pdf").
@@ -1541,6 +1556,11 @@ class MarketingLead(Base):
         DateTime, default=datetime.datetime.utcnow,
         onupdate=datetime.datetime.utcnow,
     )
+
+    # P2-24 — Email nurture sequence tracking
+    nurture_enrolled_at = Column(DateTime, nullable=True)    # when lead entered sequence
+    nurture_last_step = Column(Integer, nullable=True)        # last step sent (1-5)
+    nurture_unsubscribed_at = Column(DateTime, nullable=True) # unsubscribe timestamp
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -2958,4 +2978,545 @@ class AccountantOtpAttempt(Base):
             "email", "issued_at",
             postgresql_where=sa_text("consumed_at IS NULL"),
         ),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL: ClientDocument   (Sprint 8.3 — Document Vault DB Layer)
+# ═══════════════════════════════════════════════════════════════
+# Every file that lands in the Document Vault — whether forwarded by
+# the client via WhatsApp, emailed to their personal vault alias, or
+# uploaded manually by their accountant — becomes a row in this table.
+#
+# The row carries:
+#   - Routing metadata     (agency_id, client_id, uploaded_by_vector)
+#   - Object-store pointer (s3_bucket / s3_key — the file itself never
+#                            lives in Postgres, only its checksum + ref)
+#   - Content fingerprint  (sha256, mime_type, size_bytes) for dedup
+#                            and forensic chain-of-custody
+#   - Classification slot  (document_type, tax_year, extracted_metadata)
+#                            populated asynchronously by the OCR + ML
+#                            classifier worker
+#   - Compliance lifecycle (created_at, archived_until, deleted_at)
+#
+# COMPLIANCE INVARIANTS (DB-level, not application-level):
+#
+#   1. 7-year retention   — Israeli Tax Ordinance §134B requires
+#      taxpayers to retain books and records for 7 calendar years.
+#      `archived_until` MUST be at least 7 years after `created_at`.
+#      A CHECK constraint enforces this at write time — the application
+#      cannot accidentally set a shorter retention window.
+#
+#   2. Retention lock     — `deleted_at` may only be populated AFTER
+#      `archived_until` has passed. A CHECK constraint blocks
+#      premature soft-deletes regardless of code path. The audit
+#      trail is therefore tamper-evident at the database level.
+#
+# These constraints intentionally use PostgreSQL interval syntax. The
+# table is provisioned in production against Postgres; local SQLite
+# dev runs the same model but skips the temporal CHECK (SQLite has no
+# `interval` keyword — the constraint is added in the Postgres-only
+# migration `migrate_phase21_vault.py`).
+# ═══════════════════════════════════════════════════════════════
+class ClientDocument(Base):
+    __tablename__ = "client_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # ── Routing ──
+    # `agency_id` = the accountant's firm (an Organization with the
+    # "agency" sub-type). `client_id` = the SMB whose books the agency
+    # is keeping. Both are foreign keys to organizations.
+    agency_id = Column(
+        Integer,
+        ForeignKey("organizations.id"),
+        index=True,
+        nullable=False,
+    )
+    client_id = Column(
+        Integer,
+        ForeignKey("organizations.id"),
+        index=True,
+        nullable=False,
+    )
+
+    # How the document entered the vault — drives the upstream
+    # classification pipeline and the audit narrative.
+    uploaded_by_vector = Column(String(16), nullable=False)
+    # "whatsapp" | "email" | "manual"
+
+    # ── Object-store pointer (file itself lives in S3 / GCS) ──
+    s3_key = Column(String(512), unique=True, nullable=False)
+    s3_bucket = Column(String(120), nullable=False)
+
+    # ── Classification slot (populated by async classifier worker) ──
+    document_type = Column(String(24), default="unclassified", nullable=False)
+    # "invoice" | "receipt" | "bank_statement" | "tax_form" | ...
+
+    # ── File metadata + content fingerprint ──
+    file_name = Column(String(255), nullable=False)
+    mime_type = Column(String(80), nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    sha256 = Column(String(64), index=True, nullable=False)
+
+    # ── Provenance ──
+    sender_phone_e164 = Column(String(20), nullable=True)
+    sender_email = Column(String(255), nullable=True)
+    extracted_metadata = Column(
+        JSON().with_variant(JSONB(), "postgresql"),
+        nullable=True,
+    )
+
+    # ── Tax-period + lifecycle ──
+    tax_year = Column(Integer, index=True, nullable=False)
+    status = Column(String(16), default="received", nullable=False)
+    # "received" | "classified" | "exported" | "archived" | "error"
+    error_reason = Column(String, nullable=True)
+
+    # ── Compliance timestamps ──
+    created_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        nullable=False,
+    )
+    archived_until = Column(DateTime, index=True, nullable=False)
+    deleted_at = Column(DateTime, nullable=True)
+
+    # ── Compliance constraints (Postgres-enforced) ──
+    __table_args__ = (
+        CheckConstraint(
+            "archived_until >= created_at + interval '7 years'",
+            name="compliance_7_year_retention_check",
+        ),
+        CheckConstraint(
+            "deleted_at IS NULL OR deleted_at > archived_until",
+            name="retention_lock_prevent_premature_delete",
+        ),
+        Index(
+            "ix_client_doc_agency_client",
+            "agency_id", "client_id",
+        ),
+        Index(
+            "ix_client_doc_taxyear_status",
+            "tax_year", "status",
+        ),
+        Index(
+            "ix_client_doc_client_created",
+            "client_id", "created_at",
+        ),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL: VaultIngestionAddress   (Sprint 8.3 — Document Vault Router)
+# ═══════════════════════════════════════════════════════════════
+# Each client organization gets exactly ONE row that maps:
+#
+#   {email_alias_token, whatsapp_e164}  →  client_id
+#
+# Clients forward documents to:
+#
+#   vault+<email_alias_token>@api-aurora-lts.com
+#       OR
+#   WhatsApp DID associated with the agency, which routes by
+#   sender phone number against `whatsapp_e164`.
+#
+# `email_alias_token` is a high-entropy 16-character hex string. It's
+# unguessable enough that an attacker who knows a client's name still
+# cannot guess the alias. Tokens are stable for life — once printed
+# in onboarding material, they do not rotate without explicit admin
+# action (rotation would invalidate the printed handouts).
+#
+# `whatsapp_e164` is optional because not every client links a phone;
+# email-only ingestion is supported.
+#
+# `active=False` disables ingestion without deleting the row, so the
+# audit chain `email_alias_token → historical_client_id` survives.
+# ═══════════════════════════════════════════════════════════════
+class VaultIngestionAddress(Base):
+    __tablename__ = "vault_ingestion_addresses"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    client_id = Column(
+        Integer,
+        ForeignKey("organizations.id"),
+        unique=True,
+        nullable=False,
+    )
+
+    email_alias_token = Column(String(48), unique=True, nullable=False)
+    # 16-hex-char by default (8 bytes from secrets.token_hex). Width 48
+    # leaves headroom for future longer tokens.
+
+    whatsapp_e164 = Column(String(20), index=True, nullable=True)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        nullable=False,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P1-22 — API KEYS (service-to-service authentication)
+# ═══════════════════════════════════════════════════════════════
+# Used by Make.com webhook relays + future integration partners.
+# The plaintext key is hashed (SHA-256) before persist — even a DB
+# leak does not expose usable credentials. Lookups are by hash, so
+# the plaintext is only known at mint time + held by the caller.
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Human label — what / who this key is for. NOT a secret.
+    name = Column(String(120), nullable=False, unique=True, index=True)
+
+    # SHA-256 hex digest of the plaintext key. The plaintext is shown
+    # to the operator once at mint time, then discarded.
+    key_hash = Column(String(64), nullable=False, unique=True, index=True)
+
+    # Optional scope string (free-form for now; e.g. 'make-webhook').
+    scope = Column(String(80), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)
+
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-01 — RECURRING INVOICE SCHEDULES
+# ═══════════════════════════════════════════════════════════════
+# A template for an invoice that should be issued at a fixed
+# cadence (e.g. "10,000 ILS from Customer X on the 1st of every
+# month"). The tick worker queries `next_due_at <= now() AND active`,
+# creates a draft invoice via services/invoice_service.create_draft_invoice,
+# and advances next_due_at by `cadence`.
+class RecurringInvoiceSchedule(Base):
+    __tablename__ = "recurring_invoice_schedules"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    business_id = Column(
+        Integer, ForeignKey("businesses.id"), nullable=False, index=True
+    )
+
+    # Invoice template fields — mirror create_draft_invoice args.
+    beneficiary_name = Column(String(200), nullable=False)
+    beneficiary_tax_id = Column(String(32), nullable=True)
+    beneficiary_contact = Column(String(255), nullable=True)
+    amount_net = Column(Float, nullable=False)
+    description = Column(String, nullable=True)
+
+    # Cadence — one of: "weekly" "monthly" "quarterly" "yearly".
+    cadence = Column(String(16), nullable=False)
+
+    # Driver state — when the NEXT invoice should be minted.
+    next_due_at = Column(DateTime, nullable=False, index=True)
+    # When the LAST invoice was minted (null on a brand-new schedule).
+    last_run_at = Column(DateTime, nullable=True)
+
+    # Soft delete — flip to False to stop generating without losing
+    # the audit trail of past runs.
+    active = Column(Boolean, default=True, nullable=False, index=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_recurring_due_active",
+            "next_due_at", "active",
+        ),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-02 — FX RATES (Bank of Israel daily feed)
+# ═══════════════════════════════════════════════════════════════
+# Israeli Tax Authority requires invoice reporting in ILS even when
+# the customer is billed in a foreign currency. We cache the daily
+# Bank of Israel rate per (currency, observed_date) so that:
+#   - Conversions are deterministic + auditable (same rate used by
+#     the regulator).
+#   - We don't hit BoI's public API on every invoice render.
+#
+# Unique on (currency, observed_date) — at most one rate per day.
+class FxRate(Base):
+    __tablename__ = "fx_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # ISO-4217: "USD", "EUR", "GBP", etc.
+    currency = Column(String(3), nullable=False, index=True)
+
+    # How many ILS one unit of `currency` is worth on observed_date.
+    # e.g. currency="USD", rate_to_ils=3.65 → 1 USD = 3.65 ILS.
+    rate_to_ils = Column(Float, nullable=False)
+
+    # The date the rate was OBSERVED by BoI (typically the previous
+    # business day). NOT when we fetched it.
+    observed_date = Column(DateTime, nullable=False, index=True)
+
+    # When we ingested this row.
+    fetched_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    # Provenance — which feed did the rate come from.
+    # "boi" = bank of israel (default). Future: "manual_override".
+    source = Column(String(16), nullable=False, default="boi")
+
+    __table_args__ = (
+        UniqueConstraint("currency", "observed_date", name="uq_fx_currency_date"),
+        Index("ix_fx_currency_date", "currency", "observed_date"),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-06 — BANK STATEMENT ENTRIES (reconciliation engine)
+# ═══════════════════════════════════════════════════════════════
+# Rows ingested from bank statements (CSV upload today; Open Banking
+# AISP feed in the future when per-bank credentials are provisioned).
+# The reconciliation matcher tries to link each entry to an Invoice
+# by amount + date + counterparty fuzzy match.
+class BankStatementEntry(Base):
+    __tablename__ = "bank_statement_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+
+    # ── Transaction details from the bank ──
+    posted_at = Column(DateTime, nullable=False, index=True)
+    amount = Column(Float, nullable=False)         # positive = credit, negative = debit
+    currency = Column(String(3), nullable=False, default="ILS")
+    counterparty_name = Column(String(255), nullable=True)
+    reference = Column(String(120), nullable=True)  # bank's free-text memo
+    source_bank = Column(String(40), nullable=True)  # "leumi", "discount", ...
+    external_id = Column(String(120), nullable=True, index=True)  # idempotency
+
+    # ── Reconciliation state ──
+    # unmatched | suggested | linked | ignored
+    match_status = Column(String(16), nullable=False, default="unmatched", index=True)
+    matched_invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
+    match_confidence = Column(Float, nullable=True)   # 0.0–1.0 when matched
+    match_reason = Column(String(255), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    matched_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("business_id", "external_id", name="uq_bse_biz_extid"),
+        Index("ix_bse_business_status_date", "business_id", "match_status", "posted_at"),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-07 — INVOICE PAYMENTS (partial payment support)
+# ═══════════════════════════════════════════════════════════════
+# One InvoicePayment row per payment applied to an Invoice. The sum
+# of rows for an invoice = total paid. balance_due = amount_total - sum.
+# Auto-created when a BankStatementEntry links to an Invoice (P2-06).
+class InvoicePayment(Base):
+    __tablename__ = "invoice_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(
+        Integer, ForeignKey("invoices.id"), nullable=False, index=True,
+    )
+
+    amount = Column(Float, nullable=False)
+    currency = Column(String(3), nullable=False, default="ILS")
+    paid_at = Column(DateTime, nullable=False)
+
+    # Where did the payment come from?
+    source = Column(String(40), nullable=False, default="manual")
+    # "manual" | "bank_statement" | "payplus" | "remittance_link"
+
+    # Backreference to the bank statement entry, if reconciliation
+    # generated the row. NULL for manual entries.
+    bank_entry_id = Column(
+        Integer, ForeignKey("bank_statement_entries.id"),
+        nullable=True, index=True,
+    )
+
+    note = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("invoice_id", "bank_entry_id", name="uq_payment_invoice_bank"),
+        Index("ix_invoice_payments_invoice_id", "invoice_id"),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-08 — AML / SANCTIONS SCREENING
+# ═══════════════════════════════════════════════════════════════
+# Cached entries from public sanctions lists. Refreshed weekly via
+# Cloud Scheduler hitting POST /api/v1/aml/refresh-lists.
+class SanctionsListEntry(Base):
+    __tablename__ = "sanctions_list_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Source: "ofac_sdn" | "il_mof" | "eu_consolidated" | "uk_hmt"
+    list_source = Column(String(32), nullable=False, index=True)
+    # External ID within that list (OFAC uses an integer; we store as string).
+    external_id = Column(String(64), nullable=False, index=True)
+
+    full_name = Column(String(512), nullable=False, index=True)
+    # Other names / aliases stored as a single comma-separated string —
+    # avoids JSON storage on SQLite. Fine for fuzzy matching.
+    aliases = Column(String, nullable=True)
+
+    entity_type = Column(String(16), nullable=True)  # "individual" | "entity"
+    country_code = Column(String(8), nullable=True)
+    program = Column(String(120), nullable=True)     # e.g. "SDGT", "IRAN-EO13902"
+
+    last_updated_at = Column(DateTime, nullable=True)  # publisher date
+    fetched_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("list_source", "external_id", name="uq_sanctions_src_extid"),
+        Index("ix_sanctions_full_name", "full_name"),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-08 — Sanctions screening hit log
+# ═══════════════════════════════════════════════════════════════
+# Every screening call writes a row — high-score hits get human review.
+class SanctionsScreeningHit(Base):
+    __tablename__ = "sanctions_screening_hits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
+
+    queried_name = Column(String(512), nullable=False)
+    matched_entry_id = Column(
+        Integer, ForeignKey("sanctions_list_entries.id"), nullable=False,
+    )
+    match_score = Column(Float, nullable=False)
+    # "pending_review" | "false_positive" | "confirmed" | "ignored"
+    status = Column(String(24), nullable=False, default="pending_review", index=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    review_note = Column(String(500), nullable=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-20 — Predictive Anomaly Detection events
+# ═══════════════════════════════════════════════════════════════
+class AnomalyEvent(Base):
+    __tablename__ = "anomaly_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
+
+    signal_type = Column(String(48), nullable=False, index=True)
+    # "low" | "medium" | "high" | "critical"
+    severity = Column(String(16), nullable=False, index=True)
+    score = Column(Float, nullable=False)
+    description = Column(String(1000), nullable=False)
+    metadata_json = Column(String, nullable=True)   # serialised dict
+
+    # Lifecycle: "open" → "acknowledged" | "false_positive" | "escalated"
+    status = Column(String(24), nullable=False, default="open", index=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolution_note = Column(String(500), nullable=True)
+
+    __table_args__ = (
+        Index("ix_anomaly_events_business_signal", "business_id", "signal_type"),
+        Index("ix_anomaly_events_created_at", "created_at"),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-22 — VAT Return Filing
+# ═══════════════════════════════════════════════════════════════
+class VatReturn(Base):
+    __tablename__ = "vat_returns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+    tax_id = Column(String(20), nullable=True)
+
+    # Period identification
+    period_year = Column(Integer, nullable=False)
+    period_number = Column(Integer, nullable=False)        # 1–6 (bi-monthly) or 1–4 (quarterly)
+    period_frequency = Column(String(16), nullable=False)  # "bimonthly" | "quarterly"
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    due_date = Column(Date, nullable=False)
+
+    # Sales (outputs)
+    taxable_sales_ils = Column(Float, nullable=False, default=0.0)
+    vat_collected_ils = Column(Float, nullable=False, default=0.0)
+    exempt_sales_ils = Column(Float, nullable=False, default=0.0)
+    invoice_count = Column(Integer, nullable=False, default=0)
+
+    # Purchases (inputs)
+    taxable_purchases_ils = Column(Float, nullable=False, default=0.0)
+    input_vat_ils = Column(Float, nullable=False, default=0.0)
+    expense_count = Column(Integer, nullable=False, default=0)
+
+    # Net
+    net_vat_payable_ils = Column(Float, nullable=False, default=0.0)
+
+    # Lifecycle: draft → submitted | rejected
+    status = Column(String(16), nullable=False, default="draft", index=True)
+    confirmation_number = Column(String(64), nullable=True)
+    rejection_reason = Column(String(500), nullable=True)
+
+    submitted_at = Column(DateTime, nullable=True)
+    submitted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "business_id", "period_year", "period_number", "period_frequency",
+            name="uq_vat_return_period",
+        ),
+        Index("ix_vat_returns_due_date", "due_date"),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2-23 — Payment Links
+# ═══════════════════════════════════════════════════════════════
+class PaymentLink(Base):
+    __tablename__ = "payment_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+
+    # Cryptographic material
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    nonce = Column(String(32), nullable=False)
+
+    # Financial metadata (denormalised for fast checkout rendering)
+    amount_ils = Column(Float, nullable=False)
+    currency = Column(String(3), nullable=False, default="ILS")
+
+    # Lifecycle: open → paid | expired | cancelled | failed
+    status = Column(String(16), nullable=False, default="open", index=True)
+
+    expires_at = Column(DateTime, nullable=False)
+    paid_at = Column(DateTime, nullable=True)
+    payplus_transaction_id = Column(String(128), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (
+        Index("ix_payment_links_invoice_status", "invoice_id", "status"),
     )

@@ -80,6 +80,8 @@ from app.services.onboarding import (
     abandon_onboarding,
     OnboardingError,
 )
+from app.services.onboarding.otp_service import OtpDeliveryError
+from app.middleware.rate_limit import limiter
 
 
 # ─────────────────────────────────────────────────────────────
@@ -214,6 +216,7 @@ def health():
 # POST /onboarding/start  — public (creates User)
 # ═══════════════════════════════════════════════════════════════
 @router.post("/start", status_code=201)
+@limiter.limit("5/minute")
 def start_endpoint(payload: StartRequest, request: Request, db: Session = Depends(get_db)):
     """
     Bootstrap a new tenant. Creates the User row, issues a JWT, and
@@ -356,6 +359,7 @@ def submit_identity(
 # OTP endpoints (phone + email)
 # ═══════════════════════════════════════════════════════════════
 @router.post("/phone/send-otp")
+@limiter.limit("3/minute")
 def send_phone_otp(
     payload: SendOtpRequest,
     request: Request,
@@ -368,15 +372,19 @@ def send_phone_otp(
             channel="phone",
             target=payload.target.strip(),
             purpose=payload.purpose or "signup",
+            lang=current_user.language_pref or "he",
             db=db,
             request_ip=request.client.host if request.client else None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except OtpDeliveryError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     return result
 
 
 @router.post("/phone/verify-otp")
+@limiter.limit("10/minute")
 def verify_phone_otp(
     payload: VerifyOtpRequest,
     request: Request,
@@ -407,6 +415,7 @@ def verify_phone_otp(
 
 
 @router.post("/email/send-otp")
+@limiter.limit("5/minute")
 def send_email_otp(
     payload: SendOtpRequest,
     request: Request,
@@ -419,15 +428,19 @@ def send_email_otp(
             channel="email",
             target=payload.target.strip().lower(),
             purpose=payload.purpose or "signup",
+            lang=current_user.language_pref or "he",
             db=db,
             request_ip=request.client.host if request.client else None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except OtpDeliveryError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     return result
 
 
 @router.post("/email/verify-otp")
+@limiter.limit("10/minute")
 def verify_email_otp(
     payload: VerifyOtpRequest,
     request: Request,

@@ -26,10 +26,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 
-from aurora_shared.database import create_tables, get_db, Business, User, SessionLocal
-from aurora_shared.middleware.auth_middleware import get_current_user, require_admin
+from app.database import create_tables, get_db, Business, User, SessionLocal
+from app.middleware.auth_middleware import get_current_user, require_admin
+from app.middleware.rate_limit import limiter
 from app.routers.whatsapp import router as whatsapp_router
 from app.routers.invoices import router as invoices_router
 from app.routers.auth import router as auth_router
@@ -45,9 +48,22 @@ from app.routers.admin_compliance import router as admin_compliance_router  # Sp
 from app.routers.marketing import router as marketing_router                 # Sprint 7 — Marketing capture (aurora-ltd.co.il)
 from app.routers.admin_break_glass import router as admin_break_glass_router # Track 3 — Break-glass JWT lifecycle (IAP-only)
 from app.routers.admin_users import router as admin_users_router             # Track 4 — Admin users + orgs list (feeds aurora-admin-ui)
-from app.routers.admin_exec import router as admin_exec_router               # Exec telemetry/charts — copilot extracted to aurora-api-core (routers/copilot.py)
-# MOVED to aurora-api-core (app.main_core): native_shell + the extracted copilot router
+from app.routers.admin_exec import router as admin_exec_router               # Appendix H — Tier 1 CEO Executive Dashboard backend
+from app.routers.native_shell import router as native_shell_router           # Sprint 8.2 — Aurora Mac Shell hardware binding (Phase 20)
 from app.routers.accountant_auth import router as accountant_auth_router    # Sprint 8.2 sibling — Accountant Portal auth (Phase 21)
+from app.routers.accountant_dashboard import router as accountant_dashboard_router  # P1-16 — Accountant Portal dashboard KPIs
+from app.routers.accountant_vault import router as accountant_vault_router          # P1-17 — Accountant Portal manual vault upload
+from app.routers.recurring_invoices import router as recurring_invoices_router      # P2-01 — recurring invoice engine
+from app.routers.fx import router as fx_router                                      # P2-02 — BoI FX rates
+from app.routers.autonomous_agents import router as autonomous_agents_router        # P2-04 — agent dispatch
+from app.routers.credit_notes import router as credit_notes_router                  # P2-05 — credit notes (חשבונית זיכוי)
+from app.routers.banking import router as banking_router                            # P2-06 — payment reconciliation
+from app.routers.invoice_payments import router as invoice_payments_router          # P2-07 — partial payment recording
+from app.routers.aml import router as aml_router                                    # P2-08 — AML / sanctions screening
+from app.routers.anomaly import router as anomaly_router                            # P2-20 — predictive anomaly detection
+from app.routers.vat_filing import router as vat_filing_router                      # P2-22 — VAT return filing automation
+from app.routers.payment_links import router as payment_links_router                # P2-23 — payment links
+from app.routers.realtime import router as realtime_router                          # P2-25 — SSE stream + APNs push
 
 
 # ─────────────────────────────────────────────────────────────
@@ -89,6 +105,15 @@ def _default_kyc_stub_dir() -> str:
 
 
 # ─────────────────────────────────────────────────────────────
+# STRUCTURED LOGGING (P1-08)
+# ─────────────────────────────────────────────────────────────
+# JSON logs to stderr when AURORA_RUNTIME=cloud_run, human-readable
+# text when running locally. Includes request_id from P1-07 context.
+from app.logging_config import configure_logging
+configure_logging()
+
+
+# ─────────────────────────────────────────────────────────────
 # CREATE THE APP
 # ─────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -96,6 +121,27 @@ app = FastAPI(
     description="AURORA LTS LTD (אורורה אל.טי.אס. בע\"מ) — Smart Business OS for Israeli SMBs",
     version="3.0.0-aurora",
 )
+
+# ── Rate limiting (P0-09) ──
+# limiter reads RATE_LIMIT_BACKEND: 'memory' (dev) | 'redis' (production).
+# RateLimitExceeded → 429 with Retry-After header via slowapi's built-in handler.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── X-Request-ID middleware (P1-07) ──
+# Tags every request with a UUID (or trusts the inbound X-Request-ID
+# from Cloud Run / Global LB). Echoed back in the response so clients
+# can quote it when filing tickets. Exposed via contextvars to
+# background tasks + the structured logger.
+from app.middleware.request_id import RequestIDMiddleware
+app.add_middleware(RequestIDMiddleware)
+
+# ── Global exception handlers (P1-06) ──
+# HTTPException re-emitted with request_id attached.
+# Uncaught Exception logged with full traceback + request_id, returned
+# to client as a safe JSON envelope (no traceback leak).
+from app.middleware.error_handlers import register_exception_handlers
+register_exception_handlers(app)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -120,6 +166,11 @@ app.add_middleware(
         "https://app.aurora-ltd.co.il",        # forward-compat: future authenticated SPA
         "https://console.api-aurora-lts.com",  # Executive Cockpit (Appendix M — primary)
         "https://admin.aurora-ltd.co.il",      # legacy admin URL — REMOVE in Appendix M P10 cutover
+        # Sprint 8.2.1 — Accountant Portal (Tauri desktop app)
+        "https://api-aurora-lts.com",          # API-origin browser fetch from portal web layer
+        "https://portal.api-aurora-lts.com",   # portal download/landing page
+        "tauri://localhost",                    # Tauri renderer on macOS + Linux
+        "https://tauri.localhost",              # Tauri renderer on Windows
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -155,9 +206,22 @@ app.include_router(admin_compliance_router) # Sprint 6 — DSAR + audit + payout
 app.include_router(marketing_router)         # Sprint 7 — POST /api/v1/marketing/lead (public, anonymous)
 app.include_router(admin_break_glass_router) # Track 3 — list + revoke break-glass tokens (IAP-strict)
 app.include_router(admin_users_router)       # Track 4 — admin users + orgs list (consumed by aurora-admin-ui)
-app.include_router(admin_exec_router)        # Exec telemetry/charts (copilot now on aurora-api-core)
-# native_shell + copilot moved to aurora-api-core (app.main_core)
+app.include_router(admin_exec_router)        # Appendix H — Tier 1 CEO Executive Dashboard endpoints
+app.include_router(native_shell_router)      # Sprint 8.2 — Aurora Mac Shell handshake + device list/revoke
 app.include_router(accountant_auth_router)   # Sprint 8.2 sibling — Accountant Portal OTP + device mgmt
+app.include_router(accountant_dashboard_router)  # P1-16 — Accountant Portal dashboard KPIs
+app.include_router(accountant_vault_router)      # P1-17 — Accountant Portal manual vault upload
+app.include_router(recurring_invoices_router)    # P2-01 — recurring invoice engine
+app.include_router(fx_router)                    # P2-02 — BoI FX rates
+app.include_router(autonomous_agents_router)     # P2-04 — agent dispatch
+app.include_router(credit_notes_router)          # P2-05 — credit notes
+app.include_router(banking_router)               # P2-06 — payment reconciliation
+app.include_router(invoice_payments_router)      # P2-07 — partial payments
+app.include_router(aml_router)                   # P2-08 — AML / sanctions screening
+app.include_router(anomaly_router)               # P2-20 — predictive anomaly detection
+app.include_router(vat_filing_router)            # P2-22 — VAT return filing
+app.include_router(payment_links_router)         # P2-23 — payment links + PayPlus checkout
+app.include_router(realtime_router)              # P2-25 — SSE stream + APNs push notifications
 
 
 # ─────────────────────────────────────────────────────────────
@@ -179,16 +243,46 @@ async def startup():
     print("  ASG Solutions API v2.0.0")
     print("  Starting up...")
     print("=" * 50)
-    # ── DB schema setup + phase migrations — NO LONGER on every cold start ──
-    # create_all + 18 phases is heavy and contends on the shared DB, which can
-    # hang the worker on boot. Run it as a deliberate one-off instead:
-    #     cd services/aurora-main-api && python -m app.db_setup
-    # Opt in to inline boot-time setup (dev / fresh DB) with AURORA_RUN_DB_SETUP_ON_BOOT=1.
+
+    # ── Validate required secrets before anything else ──
+    # In production (AURORA_RUNTIME=cloud_run): raises RuntimeError on the
+    # first missing / placeholder secret — Cloud Run will not mark the
+    # instance healthy, preventing a broken deploy from serving traffic.
+    # In dev mode: logs warnings and continues.
+    from app.config.secrets import validate_all_secrets
+    validate_all_secrets()
+
+    # ── P1-09/10/11: refuse to boot Cloud Run with stub backends ──
+    # ITA / STORAGE / AUDIT_BIGQUERY backends silently no-op when stub.
+    # In production that means fake invoice allocations, dropped GCS
+    # writes, and discarded audit events — invisible to operators.
+    from app.config.backend_check import validate_backend_selectors
+    validate_backend_selectors()
+
+    # ── DB schema setup + phase migrations — gated off the boot path ──
+    # The v0.2.2 cutover surfaced a 6-min import-time stall caused by the
+    # eager engine init + the heavy create_all + 22-phase block. The
+    # remediation moves migrations OFF the boot path entirely:
+    #
+    #   cd services/aurora-main-api && python -m app.db_setup
+    #
+    # (Or use the aurora-api-db-setup Cloud Run Job — same image, command
+    # = `python -m app.db_setup`. See docs/architecture/M1_STARTUP_STALL.md.)
+    #
+    # Opt in to inline boot-time setup (dev / fresh DB only) with
+    # AURORA_RUN_DB_SETUP_ON_BOOT=1. When enabled, P1-01's advisory lock
+    # still serialises the create_tables + 22-phase block across instances.
     if os.getenv("AURORA_RUN_DB_SETUP_ON_BOOT", "").strip() in ("1", "true", "TRUE"):
-        from app.db_setup import run_db_setup_resilient
-        await run_db_setup_resilient()
+        from app.db.migration_lock import with_migration_lock
+        with with_migration_lock():
+            create_tables()
+            _run_all_phase_migrations()
     else:
-        print("[STARTUP] DB setup/migrations skipped on boot — run `python -m app.db_setup` (set AURORA_RUN_DB_SETUP_ON_BOOT=1 to run inline).")
+        print(
+            "[STARTUP] DB setup/migrations skipped on boot — run "
+            "`python -m app.db_setup` (set AURORA_RUN_DB_SETUP_ON_BOOT=1 "
+            "to run inline)."
+        )
 
     # ── Start WhatsApp outbound-resend worker (always on) ──
     # Safe to run even if Meta creds aren't set — the worker no-ops
@@ -200,33 +294,48 @@ async def startup():
     except Exception as e:
         print(f"[STARTUP] ⚠️ WhatsApp resend worker failed to start: {e}")
 
-    # ── Seed default admin user (runs once) ──
-    # GUARDED in production via SKIP_SEED_ADMIN=1. The hard-coded
-    # "admin@asg.com / admin123" credentials are appropriate ONLY for
-    # local development. On Cloud Run the production admin is created
-    # via the one-shot scripts/bootstrap_admin.py job (env-driven
-    # email + Secret-Manager-issued password).
-    if os.getenv("SKIP_SEED_ADMIN", "").strip() in ("1", "true", "TRUE"):
-        print("[STARTUP] SKIP_SEED_ADMIN set — skipping default admin seed (production mode)")
+    # ── Seed default admin user (dev only — never runs on Cloud Run) ──
+    # Credentials are read from environment variables so they are NEVER
+    # hardcoded in source.  Set in .env for local development:
+    #
+    #   AURORA_SEED_ADMIN_EMAIL=dev-admin@aurora-lts.local
+    #   AURORA_SEED_ADMIN_PASSWORD=<generate with secrets.token_urlsafe(16)>
+    #
+    # On Cloud Run (AURORA_RUNTIME=cloud_run) this block is skipped
+    # entirely regardless of SKIP_SEED_ADMIN.  The production admin is
+    # created once via the one-shot scripts/bootstrap_admin.py job.
+    _is_cloud_run = os.getenv("AURORA_RUNTIME", "").lower() == "cloud_run"
+    _skip_seed = os.getenv("SKIP_SEED_ADMIN", "").strip() in ("1", "true", "TRUE")
+
+    if _is_cloud_run or _skip_seed:
+        print("[STARTUP] Admin seed skipped (cloud_run or SKIP_SEED_ADMIN set)")
     else:
-        db = SessionLocal()
-        try:
-            admin = db.query(User).filter(User.role == "admin").first()
-            if not admin:
-                from aurora_shared.services.auth_service import hash_password
-                admin = User(
-                    email="admin@asg.com",
-                    password_hash=hash_password("admin123"),
-                    full_name="Ibrahim Masarwa",
-                    role="admin",
-                )
-                db.add(admin)
-                db.commit()
-                print("[STARTUP] Default admin created: admin@asg.com / admin123")
-            else:
-                print(f"[STARTUP] Admin exists: {admin.email}")
-        finally:
-            db.close()
+        _seed_email = os.getenv("AURORA_SEED_ADMIN_EMAIL", "").strip()
+        _seed_password = os.getenv("AURORA_SEED_ADMIN_PASSWORD", "").strip()
+        if not _seed_email or not _seed_password:
+            print(
+                "[STARTUP] Admin seed skipped — set AURORA_SEED_ADMIN_EMAIL and "
+                "AURORA_SEED_ADMIN_PASSWORD in .env to auto-create a dev admin."
+            )
+        else:
+            db = SessionLocal()
+            try:
+                admin = db.query(User).filter(User.role == "admin").first()
+                if not admin:
+                    from app.services.auth_service import hash_password
+                    admin = User(
+                        email=_seed_email,
+                        password_hash=hash_password(_seed_password),
+                        full_name="Dev Admin",
+                        role="admin",
+                    )
+                    db.add(admin)
+                    db.commit()
+                    print(f"[STARTUP] Dev admin created: {_seed_email}")
+                else:
+                    print(f"[STARTUP] Admin exists: {admin.email}")
+            finally:
+                db.close()
 
     # ── Ensure writable runtime dirs exist ──
     # Cloud Run filesystems are read-only EXCEPT /tmp. So in cloud-run mode
@@ -283,6 +392,252 @@ async def startup():
     print("=" * 50)
 
 
+def _run_all_phase_migrations() -> None:
+    """
+    Run all 22 hand-rolled phase migrations in sequence.
+
+    Extracted from the startup() body so the caller can wrap the entire
+    sequence in a single advisory-lock context. Idempotency of each
+    individual phase is unchanged (each migrate_phaseN file already uses
+    `ADD COLUMN IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`).
+    """
+    # ── Run Phase 4 DB migrations (adds new columns safely) ──
+    try:
+        from app.migrate_phase4 import run_phase4_migrations
+        run_phase4_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 4 migration warning: {e}")
+
+    # ── Run Phase 5 DB migrations (WhatsApp columns + tables) ──
+    try:
+        from app.migrate_phase5 import run_phase5_migrations
+        run_phase5_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 5 migration warning: {e}")
+
+    # ── Run Phase 6 DB migrations (Identity Foundation: orgs, memberships, etc.) ──
+    # Adds onboarding columns to users + creates organizations / memberships /
+    # accountant_engagements / invitations tables (the latter via create_tables
+    # above) + backfills Organization rows from existing Business rows and
+    # Membership rows from existing business_owner Users.
+    try:
+        from app.migrate_phase6 import run_phase6_migrations
+        run_phase6_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 6 migration warning: {e}")
+
+    # ── Run Phase 6b DB migrations (Aurora Onboarding Module) ──
+    # The new tables (onboarding_states, otp_verifications, kyc_documents,
+    # subscriptions, payment_methods, subscription_payments) are created
+    # by create_tables() above. This call is a sanity probe.
+    try:
+        from app.migrate_phase6b import run_phase6b_migrations
+        run_phase6b_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 6b migration warning: {e}")
+
+    # ── Run Phase 7 DB migrations (Sprint 2 — Document AI Receipt Pipeline) ──
+    # The new tables (receipts, expenses) are created by create_tables()
+    # above. This is a sanity probe + place to hang future column adds.
+    try:
+        from app.migrate_phase7 import run_phase7_migrations
+        run_phase7_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 7 migration warning: {e}")
+
+    # ── Run Phase 8 DB migrations (Sprint 3 — Real ITA Client) ──
+    # Adds 4 tracking columns to invoices and creates ita_audit_log.
+    try:
+        from app.migrate_phase8 import run_phase8_migrations
+        run_phase8_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 8 migration warning: {e}")
+
+    # ── Run Phase 9 DB migrations (Sprint 4 — Accountant + Exports) ──
+    # Sanity probe for `exports` and `accountant_coa_mappings`.
+    try:
+        from app.migrate_phase9 import run_phase9_migrations
+        run_phase9_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 9 migration warning: {e}")
+
+    # ── Run Phase 10 DB migrations (Sprint 5 — Revenue Engine) ──
+    # Sanity probe for revenue_share_ledger / accountant_payouts /
+    # accountant_referrals.
+    try:
+        from app.migrate_phase10 import run_phase10_migrations
+        run_phase10_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 10 migration warning: {e}")
+
+    # ── Run Phase 11 DB migrations (Sprint 6 — Hardening) ──
+    # Sanity probe for audit_export_cursor + installs SQLAlchemy
+    # immutability event-listeners on terminal-state rows.
+    try:
+        from app.migrate_phase11 import run_phase11_migrations
+        run_phase11_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 11 migration warning: {e}")
+
+    # ── Run Phase 12 DB migrations (Sprint 7 — Marketing + v2.0) ──
+    # Probes marketing_leads + the v2.0 Virtual Tax Shield tables
+    # (tax_obligations, virtual_ledger, virtual_balance,
+    #  remittance_links, payment_confirmations).
+    try:
+        from app.migrate_phase12 import run_phase12_migrations
+        run_phase12_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 12 migration warning: {e}")
+
+    # ── Run Phase 13 DB migrations (Track 3 — Break-glass Tier 1.5) ──
+    # Probes break_glass_tokens table for the emergency JWT system.
+    try:
+        from app.migrate_phase13 import run_phase13_migrations
+        run_phase13_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 13 migration warning: {e}")
+
+    # ── Run Phase 14 DB migrations (Appendix H — Tier 1 CEO Dashboard) ──
+    # Probes vertical_templates + exec_events tables.
+    # Optionally seeds starter vertical templates if AURORA_SEED_VERTICAL_TEMPLATES=1.
+    try:
+        from app.migrate_phase14 import run_phase14_migrations
+        run_phase14_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 14 migration warning: {e}")
+
+    # ── Run Phase 15 DB migrations (Appendix I Sprint 2) ──
+    # Probes business_categories + ceo_session_snapshots + webauthn_credentials.
+    # Adds gcs_file_path/retention/legal_hold/retrieval columns to invoices.
+    # Adds organizations.category_id FK with ON DELETE SET NULL.
+    # Installs CHECK constraints + partial indexes.
+    try:
+        from app.migrate_phase15 import run_phase15_migrations
+        run_phase15_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 15 migration warning: {e}")
+
+    # ── Run Phase 16 DB migrations (Appendix J Sprint 3 — AI Copilot) ──
+    # Probes copilot_conversations + copilot_messages + copilot_provisioning_runs +
+    # claude_api_usage tables for the Aurora AI Copilot Console.
+    try:
+        from app.migrate_phase16 import run_phase16_migrations
+        run_phase16_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 16 migration warning: {e}")
+
+    # ── Run Phase 17 DB migrations (Appendix L Sprint 4 — Vertex AI / Gemini) ──
+    # Renames claude_api_usage → llm_api_usage (in-place) and adds provider column.
+    # Probes new tables gemini_runs + daily_brief_cards.
+    # Adds gemini_classification_json + gemini_classified_at columns to receipts.
+    try:
+        from app.migrate_phase17 import run_phase17_migrations
+        run_phase17_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 17 migration warning: {e}")
+
+    # ── Run Phase 18 DB migrations (Appendix M Sprint 5 — Pre-Armed Autonomous) ──
+    # Probes 5 new tables: project_constraints, hcarl_policy_states,
+    # causal_insights, federated_sync_logs, growth_milestones.
+    # Seeds the four canonical GrowthMilestone rows (all locked) on first install.
+    try:
+        from app.migrate_phase18 import run_phase18_migrations
+        run_phase18_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 18 migration warning: {e}")
+
+    # ── Run Phase 19 DB migrations (Appendix M Sprint 6 — Domain cutover) ──
+    # Revokes all pre-cutover WebAuthn credentials (bound to old RP_ID
+    # admin.aurora-ltd.co.il) so the audit trail reflects retirement rather
+    # than silent breakage. Controlled by AURORA_PHASE19_REVOKE_ON_BOOT
+    # (default 1); set to 0 for rollback scenarios.
+    try:
+        from app.migrate_phase19 import run_phase19_migrations
+        run_phase19_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 19 migration warning: {e}")
+
+    # ── Run Phase 20 DB migrations (Sprint 8.2 — Aurora Mac Shell) ──
+    # Probes native_device_keys + native_handshake_challenges tables
+    # (created by SQLAlchemy create_tables() above), sweeps stale
+    # challenges older than 24h, and confirms JWT_SIGNING_KEY is set
+    # for native session token issuance. Controlled by
+    # AURORA_PHASE20_ENABLED (default 1).
+    try:
+        from app.migrate_phase20 import run_phase20_migrations
+        run_phase20_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 20 migration warning: {e}")
+
+    # ── Run Phase 21 DB migrations (Sprint 8.2 sibling — Accountant Portal) ──
+    # Probes accountant_devices + accountant_refresh_tokens +
+    # accountant_otp_attempts. Sweeps stale OTPs (>1h), stale refresh
+    # tokens (>60d), and old revoked devices (>1y).
+    try:
+        from app.migrate_phase21 import run_phase21_migrations
+        run_phase21_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 21 migration warning: {e}")
+
+    # ── Run Phase 21 Vault DB migrations (Sprint 8.3 — Document Vault) ──
+    # Provisions client_documents + vault_ingestion_addresses tables
+    # with the 7-year-retention CHECK constraints, builds composite
+    # indexes, and backfills a unique 16-hex email-alias token for
+    # every Organization that lacks one. Idempotent; safe on every boot.
+    try:
+        from app.migrations.migrate_phase21_vault import run_phase21_vault_migrations
+        run_phase21_vault_migrations()
+    except Exception as e:
+        print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
+
+    # ── P2-25: APNs device token columns ──
+    try:
+        from app.migrations.migrate_phase26_apns_tokens import run as run_phase26
+        run_phase26()
+    except Exception as e:
+        print(f"[STARTUP] Phase 26 APNs migration warning: {e}")
+
+    # ── P2-23: Payment links table ──
+    try:
+        from app.migrations.migrate_phase25_payment_links import run as run_phase25
+        run_phase25()
+    except Exception as e:
+        print(f"[STARTUP] Phase 25 Payment links migration warning: {e}")
+
+    # ── P2-22: VAT returns table ──
+    try:
+        from app.migrations.migrate_phase24_vat_returns import run as run_phase24
+        run_phase24()
+    except Exception as e:
+        print(f"[STARTUP] Phase 24 VAT returns migration warning: {e}")
+
+    # ── P2-20: Anomaly detection events table ──
+    try:
+        from app.migrations.migrate_phase23_anomaly import run as run_phase23
+        run_phase23()
+    except Exception as e:
+        print(f"[STARTUP] Phase 23 Anomaly migration warning: {e}")
+
+    # ── P2-08: AML / Sanctions tables ──
+    # Provisions sanctions_list_entries + sanctions_screening_hits.
+    # Idempotent; safe on every boot.
+    try:
+        from app.migrations.migrate_phase22_sanctions import run as run_phase22
+        run_phase22()
+    except Exception as e:
+        print(f"[STARTUP] Phase 22 Sanctions migration warning: {e}")
+
+    # ── P1-02: Alembic bootstrap or upgrade ──
+    # First encounter: stamps the live schema (produced by legacy phases
+    # above) as the Alembic baseline — no DDL. Subsequent boots: alembic
+    # upgrade head. Already protected by the P1-01 advisory lock above.
+    try:
+        from app.db.alembic_bootstrap import alembic_bootstrap_or_upgrade
+        alembic_bootstrap_or_upgrade()
+    except Exception as e:
+        print(f"[STARTUP] Alembic bootstrap warning: {e}")
+
+
 @app.on_event("shutdown")
 async def shutdown():
     """Gracefully shut down the Telegram bot when uvicorn stops."""
@@ -308,37 +663,30 @@ def health_check():
 
 
 # ─────────────────────────────────────────────────────────────
-# CEO DASHBOARD / UI PAGES — served from the front-end/ layer
+# DASHBOARD PAGE
 # ─────────────────────────────────────────────────────────────
-# The cockpit UI (dashboard, onboarding wizard, accountant SPA) moved out of the
-# backend into the repo's front-end/ceo-dashboard/ during the monorepo split
-# (Phase 2A, bundle-at-build). Resolution order:
-#   1. CEO_DASHBOARD_DIR env var (set by the M1 Dockerfile in Phase 4), else
-#   2. <repo>/front-end/ceo-dashboard relative to this file (local dev).
-# NOTE: until the Phase-4 Dockerfile COPYs front-end/ceo-dashboard into the M1
-# image (or sets CEO_DASHBOARD_DIR), a rebuilt M1 container will 404 these pages.
-_CEO_DASHBOARD_DIR = os.getenv("CEO_DASHBOARD_DIR") or os.path.abspath(
-    # services/aurora-main-api/app/main.py -> repo root is three levels up.
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "front-end", "ceo-dashboard")
-)
-
-
 @app.get("/dashboard")
 def serve_dashboard():
     """Serve the admin dashboard HTML page."""
-    return FileResponse(os.path.join(_CEO_DASHBOARD_DIR, "dashboard.html"))
+    return FileResponse("app/static/dashboard.html")
 
 
+# ─────────────────────────────────────────────────────────────
+# AURORA ONBOARDING WIZARD PAGE
+# ─────────────────────────────────────────────────────────────
 @app.get("/onboarding")
 def serve_onboarding():
     """Serve the multi-step Aurora onboarding wizard."""
-    return FileResponse(os.path.join(_CEO_DASHBOARD_DIR, "onboarding.html"))
+    return FileResponse("app/static/onboarding.html")
 
 
+# ─────────────────────────────────────────────────────────────
+# ACCOUNTANT PORTAL (Sprint 4)
+# ─────────────────────────────────────────────────────────────
 @app.get("/accountant")
 def serve_accountant_portal():
     """Serve the accountant-portal SPA (separate from /dashboard)."""
-    return FileResponse(os.path.join(_CEO_DASHBOARD_DIR, "accountant", "index.html"))
+    return FileResponse("app/static/accountant/index.html")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -383,7 +731,7 @@ def create_business(
       existing keys, so existing dashboard JS continues to work.
     """
     # Lazy import to avoid a circular dependency at module load time.
-    from aurora_shared.services.identity import (
+    from app.services.identity import (
         get_or_create_organization_for_business,
         add_membership,
     )

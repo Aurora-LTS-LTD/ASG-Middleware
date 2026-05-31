@@ -7,8 +7,9 @@
 .env.local
 .env.*.local
 .env.bak*
-*.env.bak
 .env.backup*
+.env.*.bak
+*.env.bak
 *.pem
 *.key
 *-credentials.json

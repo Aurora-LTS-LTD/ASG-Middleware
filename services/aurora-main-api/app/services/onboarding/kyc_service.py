@@ -170,20 +170,14 @@ def init_document_upload(
     db.refresh(doc)
 
     # ── Build the upload URL ──
-    backend = _kyc_backend()
-    if backend == "stub":
-        # Local PUT endpoint — see /api/v1/onboarding/documents/upload-stub/{doc_id}
-        public_base = os.getenv("ONBOARDING_PUBLIC_URL", "http://10.0.0.2:8000/onboarding")
-        # Strip trailing /onboarding if present so we can build a clean API URL
-        api_base = public_base.replace("/onboarding", "").rstrip("/")
-        upload_url = f"{api_base}/api/v1/onboarding/documents/{doc.id}/upload-stub"
-    else:
-        # Production: real GCS signed URL — implementation lands in Sprint 2
-        # alongside the google-cloud-storage SDK addition.
-        raise NotImplementedError(
-            "GCS-backed signed URLs land in Sprint 2. "
-            "Set KYC_BACKEND=stub for now."
-        )
+    from app.services.gcp.storage import signed_put_url
+    upload_url = signed_put_url(
+        bucket=_bucket_name(),
+        object_key=object_key,
+        mime_type=mime_type,
+        max_bytes=bytes_size,
+        ttl_seconds=SIGNED_URL_TTL_SECONDS,
+    )
 
     return {
         "doc_id": doc.id,
@@ -220,7 +214,7 @@ def finalize_document_upload(
         # Already finalized / approved / rejected — return as-is (idempotent).
         return doc
 
-    # ── Verify the bytes landed ──
+    # ── Verify the bytes landed and compute sha256 ──
     backend = _kyc_backend()
     if backend == "stub":
         local_path = _LOCAL_KYC_DIR / doc.id
@@ -228,7 +222,6 @@ def finalize_document_upload(
             raise ValueError(
                 "No bytes received yet at the upload URL. Did the browser PUT succeed?"
             )
-        # Compute sha256 of the local file
         sha = hashlib.sha256()
         actual_size = 0
         with open(local_path, "rb") as fp:
@@ -236,12 +229,30 @@ def finalize_document_upload(
                 sha.update(chunk)
                 actual_size += len(chunk)
         doc.sha256 = sha.hexdigest()
-        # Update bytes_size in case the client reported wrong size at init
         doc.bytes_size = actual_size
+
+    elif backend == "gcs":
+        from google.cloud import storage as gcs_sdk  # lazy import
+        from app.services.gcp.storage import _kyc_credentials
+
+        creds = _kyc_credentials()
+        client = gcs_sdk.Client(credentials=creds)
+        blob = client.bucket(doc.gcs_bucket).blob(doc.gcs_object_key)
+
+        if not blob.exists():
+            raise ValueError(
+                "No bytes received in GCS yet. Did the browser PUT to the signed URL succeed?"
+            )
+
+        # Download to compute sha256 server-side (max 10 MB — ~50ms on Cloud Run)
+        # SPRINT-9: replace with async Cloud Function trigger on bucket notification
+        # to avoid blocking the finalize request on large files.
+        raw = blob.download_as_bytes(timeout=30)
+        doc.sha256 = hashlib.sha256(raw).hexdigest()
+        doc.bytes_size = len(raw)
+
     else:
-        raise NotImplementedError(
-            "GCS-backed finalize lands in Sprint 2."
-        )
+        raise ValueError(f"Unknown KYC_BACKEND='{backend}'")
 
     # ── Flip to pending_review (manual review queue per spec) ──
     doc.status = "pending_review"

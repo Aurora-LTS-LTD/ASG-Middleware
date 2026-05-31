@@ -12,32 +12,46 @@ DUAL-DIALECT SUPPORT (Part III, Phase 2 — GCP deployment):
     SQLite    → check_same_thread=False, WAL pragma, no pooling
     Postgres  → connection pooling, pre-ping, recycle stale conns
 
-REAL-WORLD ANALOGY:
-  This file is the "front desk" of the hotel. When a request arrives,
-  the front desk (SessionLocal) hands out a room key (session). When
-  the request finishes, the key is returned. In dev the hotel runs out
-  of a single guest book (SQLite file); in production it's a real
-  Postgres server in Tel Aviv (Cloud SQL me-west1) with pooling.
+P1-03 — POOL SIZING FOR CLOUD RUN:
+  Worst-case Postgres connections =
+      (AURORA_DB_POOL_SIZE + AURORA_DB_MAX_OVERFLOW)
+    × AURORA_GUNICORN_WORKERS
+    × AURORA_CLOUD_RUN_MAX_INSTANCES
+
+  This MUST stay below the Cloud SQL instance connection ceiling
+  (db-custom-1-3840 = 100, db-custom-2-7680 = 200, etc.) minus
+  ~20% headroom for migrations + manual psql + monitoring.
+
+  At boot, we compute the worst case and log a WARNING if the
+  configured values exceed the budget. We do not crash — dev
+  environments often use values that exceed any production budget.
 
 ENV VARS:
-  DATABASE_URL          (optional in dev, required in production)
-                        e.g. "postgresql+psycopg://user:pass@/db?host=/cloudsql/PROJECT:REGION:INSTANCE"
-                        defaults to "sqlite:///./asg_platform.db"
+  DATABASE_URL                       (optional in dev, required in production)
+                                     e.g. "postgresql+psycopg://user:pass@/db?host=/cloudsql/PROJECT:REGION:INSTANCE"
+                                     defaults to "sqlite:///./asg_platform.db"
 
-  AURORA_DB_POOL_SIZE   default 10  (Postgres only)
-  AURORA_DB_MAX_OVERFLOW default 20 (Postgres only)
-  AURORA_DB_POOL_RECYCLE default 1800 sec / 30 min (Postgres only)
+  AURORA_DB_POOL_SIZE                default 5   (Postgres only)
+  AURORA_DB_MAX_OVERFLOW             default 5   (Postgres only)
+  AURORA_DB_POOL_RECYCLE             default 1800 sec / 30 min (Postgres only)
+
+  AURORA_CLOUD_SQL_MAX_CONNECTIONS   default 100  (db-custom-1-3840 floor)
+  AURORA_CLOUD_RUN_MAX_INSTANCES     default 10   (must match Cloud Run cap)
+  AURORA_GUNICORN_WORKERS            default 2    (must match Dockerfile -w)
 """
 
 # ─────────────────────────────────────────────────────────────
 # IMPORTS
 # ─────────────────────────────────────────────────────────────
+import logging
 import os
 import threading
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import sessionmaker, declarative_base
+
+log = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -76,9 +90,15 @@ def _build_engine():
         )
 
     # Postgres (Cloud SQL) — production.
-    pool_size = int(os.getenv("AURORA_DB_POOL_SIZE", "10"))
-    max_overflow = int(os.getenv("AURORA_DB_MAX_OVERFLOW", "20"))
+    # P1-03: defaults lowered from (10, 20) to (5, 5). Previous defaults
+    # produced 30 conns/worker × 2 workers × 100 max-instances = 6,000
+    # connections wanted at peak — far exceeds any reasonable Cloud SQL tier.
+    pool_size = int(os.getenv("AURORA_DB_POOL_SIZE", "5"))
+    max_overflow = int(os.getenv("AURORA_DB_MAX_OVERFLOW", "5"))
     pool_recycle = int(os.getenv("AURORA_DB_POOL_RECYCLE", "1800"))
+
+    _emit_pool_budget_warning(pool_size, max_overflow)
+
     return create_engine(
         SQLALCHEMY_DATABASE_URL,
         pool_pre_ping=True,     # drop dead conns before use
@@ -88,62 +108,106 @@ def _build_engine():
     )
 
 
+def _emit_pool_budget_warning(pool_size: int, max_overflow: int) -> None:
+    """
+    P1-03 — Compute the worst-case Cloud SQL connection footprint and
+    log a WARNING if it exceeds the configured ceiling. Never crashes —
+    dev setups commonly exceed any production budget.
+
+    Called from inside `_build_engine` so the warning fires the FIRST
+    time the lazy engine is materialised, not at module import.
+    """
+    cap = int(os.getenv("AURORA_CLOUD_SQL_MAX_CONNECTIONS", "100"))
+    max_instances = int(os.getenv("AURORA_CLOUD_RUN_MAX_INSTANCES", "10"))
+    workers = int(os.getenv("AURORA_GUNICORN_WORKERS", "2"))
+    headroom_fraction = 0.20  # reserve 20% for psql/migrations/monitoring
+
+    per_worker = pool_size + max_overflow
+    per_instance = per_worker * workers
+    worst_case = per_instance * max_instances
+    safe_budget = int(cap * (1 - headroom_fraction))
+
+    log.info(
+        "[DATABASE] pool budget: pool_size=%d max_overflow=%d "
+        "(=%d/worker × %d workers × %d max-instances = %d worst-case) "
+        "vs Cloud SQL cap=%d (safe budget %d with 20%% headroom)",
+        pool_size, max_overflow, per_worker, workers,
+        max_instances, worst_case, cap, safe_budget,
+    )
+
+    if worst_case > safe_budget:
+        log.warning(
+            "[DATABASE] ⚠️  Worst-case connection footprint (%d) exceeds the "
+            "safe Cloud SQL budget (%d). At peak Cloud Run scale this will "
+            "exhaust the database. Either lower AURORA_CLOUD_RUN_MAX_INSTANCES, "
+            "raise AURORA_CLOUD_SQL_MAX_CONNECTIONS (requires a bigger SQL tier), "
+            "or shrink AURORA_DB_POOL_SIZE / AURORA_DB_MAX_OVERFLOW.",
+            worst_case, safe_budget,
+        )
+
+
 def get_engine():
     """
-    Get the SQLAlchemy engine, initializing it lazily on first access.
-    
-    Uses double-check locking for thread-safety. The real engine is only
-    created once, on the first call to get_engine() or access to the
-    proxy object. Subsequent calls return the cached engine.
-    
+    Get the SQLAlchemy engine, initialising it lazily on first access.
+
+    Double-check locking for thread-safety. The real engine is built
+    exactly once per process — on the first call to get_engine() or the
+    first attribute access on the `_LazyEngine` proxy. Subsequent calls
+    return the cached engine.
+
     Returns:
         sqlalchemy.engine.Engine: The configured database engine.
     """
     global _engine
-    
+
     # First check (without lock) for performance.
     if _engine is not None:
         return _engine
-    
-    # Acquire lock to ensure only one thread initializes.
+
+    # Acquire lock to ensure only one thread initialises.
     with _engine_lock:
         # Second check (with lock) to prevent race condition.
         if _engine is not None:
             return _engine
-        
-        # Initialize the real engine.
+
         _engine = _build_engine()
-        print(f"[DATABASE] Engine bound: dialect={DIALECT!r}, url={_url_obj.render_as_string(hide_password=True)}")
+        print(
+            f"[DATABASE] Engine bound: dialect={DIALECT!r}, "
+            f"url={_url_obj.render_as_string(hide_password=True)}"
+        )
         return _engine
 
 
 class _LazyEngine:
     """
-    Proxy object that transparently defers all attribute access to the real
-    engine, initialized lazily on first access.
-    
-    This allows backward-compatible code that accesses the `engine` variable
-    to work seamlessly without modification, while still deferring engine
-    creation from import-time to first-use-time.
+    Proxy object that transparently defers all attribute access to the
+    real engine, initialised lazily on first access.
+
+    This keeps the import-time API ("from … import engine") working,
+    while moving the slow `pool_pre_ping` validation off the boot path —
+    the v0.2.2 cutover stall fix. See docs/architecture/M1_STARTUP_STALL.md.
+
+    NOTE: `sessionmaker(bind=engine)` uses this proxy, NOT the raw
+    `get_engine` callable. SQLAlchemy 2.0's bind contract calls
+    `bind.connect()` directly; passing the function reference raises
+    `AttributeError: 'function' object has no attribute 'connect'`
+    (the v0.2.3 hotfix that motivated commit edb5d60).
     """
-    
+
     def __getattr__(self, name):
-        """Forward all attribute access to the real engine."""
         real_engine = get_engine()
         return getattr(real_engine, name)
-    
+
     def __repr__(self):
-        """Forward repr to the real engine."""
         real_engine = get_engine()
         return repr(real_engine)
-    
+
     def __str__(self):
-        """Forward str to the real engine."""
         real_engine = get_engine()
         return str(real_engine)
 
 
-# Create the proxy object. Existing code that uses `engine` will work
+# Create the proxy object. Existing code that uses `engine` works
 # transparently because _LazyEngine proxies all operations.
 engine = _LazyEngine()
 

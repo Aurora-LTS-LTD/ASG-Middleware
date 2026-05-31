@@ -55,6 +55,10 @@ import httpx
 
 BASE_URL = os.getenv("AURORA_BASE_URL", "http://127.0.0.1:8000")
 
+# Dev admin credentials — read from env so no credentials live in source.
+_ADMIN_EMAIL = os.getenv("AURORA_SEED_ADMIN_EMAIL", "dev-admin@aurora-lts.local")
+_ADMIN_PASSWORD = os.getenv("AURORA_SEED_ADMIN_PASSWORD", "")
+
 
 def _c(code, s): return f"\033[{code}m{s}\033[0m"
 def title(t): print(); print(_c(96, "═"*60)); print(_c(96, f"  {t}")); print(_c(96, "═"*60))
@@ -420,7 +424,7 @@ def scenario_e_access_control():
 
         # Admin can access any org's summary
         login = client.post(f"{BASE_URL}/api/v1/auth/login",
-                            json={"email": "admin@asg.com", "password": "admin123"})
+                            json={"email": _ADMIN_EMAIL, "password": _ADMIN_PASSWORD})
         login.raise_for_status()
         Ha = {"Authorization": f"Bearer {login.json()['access_token']}"}
         r = client.get(

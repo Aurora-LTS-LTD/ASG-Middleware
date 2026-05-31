@@ -20,7 +20,7 @@ SECURITY NOTES:
 # -----------------------------------------------------------------
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ from aurora_shared.services.auth_service import (
     create_access_token,
 )
 from aurora_shared.middleware.auth_middleware import get_current_user, require_admin
+from aurora_shared.middleware.rate_limit import limiter
 
 
 # -----------------------------------------------------------------
@@ -84,7 +85,8 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 # ENDPOINT 1: POST /api/v1/auth/login -- Log In
 # =================================================================
 @router.post("/login")
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """
     Authenticate a user and return a JWT token.
 
@@ -131,8 +133,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 # ENDPOINT 2: POST /api/v1/auth/register -- Create User (Admin Only)
 # =================================================================
 @router.post("/register")
+@limiter.limit("5/minute")
 def register(
     payload: RegisterRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):

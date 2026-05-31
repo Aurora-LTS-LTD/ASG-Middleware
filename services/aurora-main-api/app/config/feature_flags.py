@@ -69,6 +69,11 @@ class AutonomousFeature(str, enum.Enum):
     PREDICTIVE_SITE = "predictive_site"
     CAUSAL_INSIGHTS = "causal_insights"
     FEDERATED_LEARNING = "federated_learning"
+    # P2-04 — first non-ML autonomous agent with REAL behaviour
+    # (the four above remain SKELETON_v0 placeholders waiting on Vertex
+    # AI training). Aggregates 24h business activity into a structured
+    # brief — pure SQL + Python, no model required.
+    DAILY_BRIEF = "daily_brief"
 
 
 ALL_FEATURES: list[AutonomousFeature] = list(AutonomousFeature)

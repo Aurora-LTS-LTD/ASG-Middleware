@@ -8,28 +8,51 @@ codes never hit the database.
 CRYPTO POSTURE:
   - Code generation: cryptographically-strong random (secrets.randbelow)
   - Storage: bcrypt hash via passlib (the same library used for User passwords)
-  - Verification: passlib.verify — constant-time-ish comparison against hash
+  - Verification: passlib.verify — constant-time comparison against hash
   - TTL: 10 minutes default for signup; 5 minutes for step-up
   - Lockout: 5 wrong attempts → status='locked'; user must request a new OTP
   - Single-use: status flips to 'consumed' atomically on successful verify
 
-DELIVERY (DEV vs PROD):
+DELIVERY WATERFALL:
   Dev (OTP_BACKEND=stub):
-    - The 6-digit code is also returned in the response payload,
-      tagged with a clear `dev_only_code` field.
-    - This lets the founder test the full flow end-to-end without a
-      real SMS / email provider attached.
+    - Code returned in response as `dev_only_code` for local testing.
+    - No network calls made.
 
-  Prod (OTP_BACKEND=inforu | twilio | sendgrid):
-    - The code is dispatched via the configured provider; the API
-      response excludes `dev_only_code`.
-    - Implementation lands when the founder picks a provider.
+  Prod (OTP_BACKEND=production):
+    Phone channel:
+      Tier 1 → WhatsApp (sendgrid_client.send_whatsapp_otp)
+               — skipped if WHATSAPP_OTP_TEMPLATE_NAME not set
+      Tier 2 → SMS (sms_client.send_sms)
+               — requires SMS_PROVIDER + provider credentials
+      On all tiers exhausted → raises OtpDeliveryError → HTTP 503
+
+    Email channel:
+      Tier 1 → SendGrid (sendgrid_client.send_onboarding_otp_email)
+               — requires SENDGRID_API_KEY
+      On failure → raises OtpDeliveryError → HTTP 503
+
+SECURITY NOTE — LOCKOUT DoS VECTOR:
+  The 5-attempt lockout is per OtpVerification row (per target/user).
+  A malicious actor who knows a user's phone number can lock their OTP
+  row by submitting 5 wrong codes before the legitimate user can.
+  Mitigation: IP-level rate limiting via slowapi (P0-09 task) must be
+  deployed before the onboarding funnel goes live.
+
+TECH DEBT — bcrypt overkill:
+  bcrypt adds 200-400ms per OTP issue for negligible security gain on
+  6-digit codes (keyspace = 10^6). Rate limiting is the real protection.
+  HMAC-SHA256(server_secret, code) would be faster and sufficient.
+  Changing now would invalidate all pending OtpVerification rows.
+  Track as Sprint 8.5 tech debt.
 """
 
 import datetime
+import logging
 import os
 import secrets
 from typing import Optional
+
+log = logging.getLogger(__name__)
 
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -48,6 +71,16 @@ OTP_TTL_SECONDS = 600                  # 10 minutes for signup OTPs
 STEP_UP_TTL_SECONDS = 300              # 5 minutes for sensitive change OTPs
 MAX_ATTEMPTS = 5                       # Lockout threshold per OtpVerification row
 RESEND_COOLDOWN_SECONDS = 60           # Min seconds between consecutive issues for the same target
+
+# ─────────────────────────────────────────────────────────────
+# Exceptions
+# ─────────────────────────────────────────────────────────────
+class OtpDeliveryError(Exception):
+    """Raised when all delivery tiers for a channel have failed."""
+    def __init__(self, channel: str, detail: str = ""):
+        self.channel = channel
+        super().__init__(f"OTP delivery failed for channel='{channel}'. {detail}")
+
 
 # Use the same bcrypt context as the auth_service password hashing.
 # bcrypt is overkill for 6-digit codes (the keyspace is tiny), but it
@@ -72,24 +105,62 @@ def _ttl_for_purpose(purpose: str) -> int:
     return STEP_UP_TTL_SECONDS if purpose == "step_up" else OTP_TTL_SECONDS
 
 
-def _send_via_provider(channel: str, target: str, code: str) -> None:
+def _sms_body(code: str, lang: str = "he") -> str:
+    """Build a short SMS body for the given language."""
+    _BODIES = {
+        "he": f"קוד האימות שלך ב-Aurora LTS: {code}. תקף ל-10 דקות. אל תשתף אותו.",
+        "ar": f"رمز التحقق الخاص بك في Aurora LTS: {code}. صالح لمدة 10 دقائق. لا تشاركه.",
+        "en": f"Your Aurora LTS verification code: {code}. Valid 10 min. Do not share.",
+    }
+    return _BODIES.get(lang, _BODIES["en"])
+
+
+def _send_via_provider(channel: str, target: str, code: str, lang: str = "he") -> None:
     """
-    Dispatch the code via the configured channel/provider.
-    Currently a stub that just prints to the server log — real provider
-    integration (Inforu for SMS, SendGrid for email) lands in a later slice.
+    Dispatch the OTP via the appropriate channel.
+
+    Email:  SendGrid (send_onboarding_otp_email) → OtpDeliveryError on failure
+    Phone:  Tier 1 WhatsApp (if env vars set) → Tier 2 SMS → OtpDeliveryError if both fail
+    Stub:   Log only; no network calls.
     """
     backend = _otp_backend()
     if backend == "stub":
-        # Log only the channel/target; the code is never logged at INFO level.
-        print(f"[OTP] STUB dispatch  channel={channel}  target={target[:3]}***{target[-2:]}")
+        log.info("[OTP] STUB dispatch channel=%s target=%s", channel, _mask_target(target))
         return
 
-    # Future: switch on backend and dispatch via real provider.
-    # For now, raise so misconfiguration is loud:
-    raise NotImplementedError(
-        f"OTP_BACKEND='{backend}' is not implemented yet. Use 'stub' until "
-        "an SMS/email provider is wired."
-    )
+    if channel == "email":
+        try:
+            from app.services.sendgrid_client import send_onboarding_otp_email
+            send_onboarding_otp_email(target, code, ttl_minutes=10, lang=lang)
+        except RuntimeError as exc:
+            raise OtpDeliveryError("email", str(exc)) from exc
+        return
+
+    if channel == "phone":
+        _dispatched = False
+
+        # Tier 1 — WhatsApp (only if all three env vars are present)
+        wa_vars = ("WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_OTP_TEMPLATE_NAME")
+        if all(os.getenv(v) for v in wa_vars):
+            try:
+                from app.services.sendgrid_client import send_whatsapp_otp
+                send_whatsapp_otp(target, code)
+                _dispatched = True
+            except RuntimeError as exc:
+                log.warning("[OTP] WhatsApp tier failed (%s) — falling back to SMS", exc)
+
+        # Tier 2 — SMS (Inforu or Twilio depending on SMS_PROVIDER)
+        if not _dispatched:
+            try:
+                from app.services.sms_client import send_sms, OtpSmsDeliveryError
+                send_sms(target, _sms_body(code, lang))
+                _dispatched = True
+            except OtpSmsDeliveryError as exc:
+                raise OtpDeliveryError("phone", str(exc)) from exc
+
+        return
+
+    raise OtpDeliveryError(channel, f"Unknown channel '{channel}'")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -101,6 +172,7 @@ def issue_otp(
     channel: str,
     target: str,
     purpose: str = "signup",
+    lang: str = "he",
     db: Session,
     request_ip: Optional[str] = None,
 ) -> dict:
@@ -127,6 +199,19 @@ def issue_otp(
     if not target or len(target) < 3:
         raise ValueError("target is required")
 
+    # E.164 validation for phone channel — blocks toll-fraud on non-IL numbers
+    if channel == "phone":
+        import phonenumbers
+        try:
+            parsed = phonenumbers.parse(target, None)
+            if not phonenumbers.is_valid_number(parsed):
+                raise ValueError(f"Invalid phone number: {_mask_target(target)}")
+            # Restrict to Israeli numbers (+972) in production to limit toll fraud
+            if _otp_backend() != "stub" and parsed.country_code != 972:
+                raise ValueError("Only Israeli (+972) phone numbers are supported")
+        except phonenumbers.NumberParseException as exc:
+            raise ValueError(f"Phone number parse error: {exc}") from exc
+
     user = db.query(User).filter(User.id == user_id, User.is_active == True).first()  # noqa: E712
     if not user:
         raise ValueError(f"user_id={user_id} not found or inactive")
@@ -141,6 +226,7 @@ def issue_otp(
             OtpVerification.target == target,
             OtpVerification.created_at > cooldown_cutoff,
         )
+        .with_for_update()
         .first()
     )
     if recent:
@@ -190,7 +276,7 @@ def issue_otp(
     db.commit()
 
     # ── Dispatch (stub or real) ──
-    _send_via_provider(channel, target, code)
+    _send_via_provider(channel, target, code, lang=lang)
 
     payload = {
         "id": otp_row.id,

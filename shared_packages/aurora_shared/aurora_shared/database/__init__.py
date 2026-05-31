@@ -79,4 +79,16 @@ from aurora_shared.database.models import (
     AccountantDevice,
     AccountantRefreshToken,
     AccountantOtpAttempt,
+    # Sprint 8.3 — Document Vault DB Layer (Phase 21 vault)
+    ClientDocument,
+    VaultIngestionAddress,
+    # P2-08 — AML / Sanctions Screening (Phase 22)
+    SanctionsListEntry,
+    SanctionsScreeningHit,
+    # P2-20 — Predictive Anomaly Detection (Phase 23)
+    AnomalyEvent,
+    # P2-22 — VAT Return Filing (Phase 24)
+    VatReturn,
+    # P2-23 — Payment Links (Phase 25)
+    PaymentLink,
 )

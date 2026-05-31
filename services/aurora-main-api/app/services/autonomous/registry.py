@@ -65,6 +65,10 @@ def get_service(
             FederatedSyncService,
         )
         _INSTANCES[feature] = FederatedSyncService()
+    elif feature == AutonomousFeature.DAILY_BRIEF:
+        # P2-04 — first non-ML autonomous service with REAL behaviour.
+        from app.services.autonomous.daily_brief import DailyBriefService
+        _INSTANCES[feature] = DailyBriefService()
     else:
         raise ValueError(f"No concrete service mapped for {feature.value}")
 

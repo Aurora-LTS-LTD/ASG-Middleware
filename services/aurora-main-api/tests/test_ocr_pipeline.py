@@ -50,6 +50,11 @@ import httpx
 
 BASE_URL = os.getenv("AURORA_BASE_URL", "http://127.0.0.1:8000")
 
+# Dev admin credentials — read from env so no credentials live in source.
+# Set AURORA_SEED_ADMIN_EMAIL / AURORA_SEED_ADMIN_PASSWORD in your .env.
+_ADMIN_EMAIL = os.getenv("AURORA_SEED_ADMIN_EMAIL", "dev-admin@aurora-lts.local")
+_ADMIN_PASSWORD = os.getenv("AURORA_SEED_ADMIN_PASSWORD", "")
+
 
 # ─────────────────────────────────────────────────────────────
 # Pretty-print helpers
@@ -304,7 +309,7 @@ def scenario_a_happy_path():
     with httpx.Client(timeout=10.0) as client:
         # Need an admin JWT to call the API; use the seeded admin
         login = client.post(f"{BASE_URL}/api/v1/auth/login",
-                            json={"email": "admin@asg.com", "password": "admin123"})
+                            json={"email": _ADMIN_EMAIL, "password": _ADMIN_PASSWORD})
         login.raise_for_status()
         token = login.json()["access_token"]
         H = {"Authorization": f"Bearer {token}"}
@@ -421,7 +426,7 @@ def scenario_e_admin_review_queue():
     step("2. Admin hits GET /admin/receipts/review-queue")
     with httpx.Client(timeout=10.0) as client:
         login = client.post(f"{BASE_URL}/api/v1/auth/login",
-                            json={"email": "admin@asg.com", "password": "admin123"})
+                            json={"email": _ADMIN_EMAIL, "password": _ADMIN_PASSWORD})
         login.raise_for_status()
         token = login.json()["access_token"]
         H = {"Authorization": f"Bearer {token}"}
@@ -486,7 +491,7 @@ def _run_via_upload_api() -> int:
         # Login as admin so we can both create org context + upload
         with httpx.Client(timeout=15.0) as client:
             login = client.post(f"{BASE_URL}/api/v1/auth/login",
-                                json={"email": "admin@asg.com", "password": "admin123"})
+                                json={"email": _ADMIN_EMAIL, "password": _ADMIN_PASSWORD})
             login.raise_for_status()
             token = login.json()["access_token"]
             H = {"Authorization": f"Bearer {token}"}

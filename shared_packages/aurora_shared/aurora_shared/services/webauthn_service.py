@@ -74,17 +74,15 @@ def _origin() -> str:
 
 
 def _step_up_secret() -> bytes:
-    """HMAC secret used to sign step-up tokens."""
-    raw = os.getenv("WEBAUTHN_STEP_UP_SECRET", "")
-    if not raw:
-        # Dev-mode fallback — DO NOT use in production. We pin to a
-        # known value so the same instance can sign + verify, but a
-        # warning is logged.
-        log.warning(
-            "WEBAUTHN_STEP_UP_SECRET not set — using DEV fallback (NOT FOR PROD)"
-        )
-        raw = "dev-step-up-secret-rotate-me-via-secret-manager"
-    return raw.encode("utf-8")
+    """HMAC secret used to sign step-up tokens.
+
+    Reads WEBAUTHN_STEP_UP_SECRET from the environment via the central
+    secret loader (config/secrets.py).  In dev mode the loader warns if
+    the variable is unset; in production it raises RuntimeError and
+    prevents startup — so a missing secret can never silently forge tokens.
+    """
+    from app.config.secrets import require_secret
+    return require_secret("WEBAUTHN_STEP_UP_SECRET", min_length=32).encode("utf-8")
 
 
 # Step-up token lifetime (mintage → expiry)

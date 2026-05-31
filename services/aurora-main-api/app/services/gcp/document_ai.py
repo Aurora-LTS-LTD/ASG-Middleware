@@ -114,6 +114,7 @@ def parse_expense(
     image_bytes: bytes,
     mime_type: str = "image/jpeg",
     gcs_uri: Optional[str] = None,
+    language_hint: str = "auto",
 ) -> ExpenseParseResult:
     """
     Run OCR on `image_bytes` (preferred) or `gcs_uri` (production-only).
@@ -124,6 +125,21 @@ def parse_expense(
 
     Stub backend ignores gcs_uri and works directly off the bytes (so
     tests don't need a configured bucket).
+
+    P2-03 — language_hint:
+      "he"   → route to DOCUMENT_AI_HEBREW_PROCESSOR_ID if configured;
+               else fall back to the default expense processor.
+      "en"   → use DOCUMENT_AI_EXPENSE_PROCESSOR_ID (the original
+               Expense Parser, multi-language but English-default).
+      "auto" → same as "en" today; in the future we may sniff the
+               first 4 KB for Hebrew Unicode (U+0590–U+05FF) and
+               route automatically.
+
+      The Hebrew-tuned processor needs to be trained by hand in the
+      Document AI Workbench — upload 30–50 sample Hebrew invoices,
+      label supplier_name / total_amount / receipt_date / vat fields,
+      train, deploy. See docs/document-ai-hebrew-training.md for the
+      step-by-step (operator work, out of this codebase's scope).
     """
     if not image_bytes and not gcs_uri:
         raise OcrError("parse_expense requires image_bytes or gcs_uri")
@@ -132,9 +148,31 @@ def parse_expense(
         return _stub_parse(image_bytes or b"", mime_type)
 
     if OCR_BACKEND == "documentai":
-        return _documentai_parse(image_bytes, mime_type, gcs_uri)
+        return _documentai_parse(image_bytes, mime_type, gcs_uri, language_hint)
 
     raise ValueError(f"Unknown OCR_BACKEND='{OCR_BACKEND}'")
+
+
+def _select_processor_id(language_hint: str) -> tuple[str, str]:
+    """
+    Decide which Document AI processor to call.
+    Returns (processor_id, processor_kind) where kind ∈ {"hebrew", "default"}.
+    """
+    default_id = (os.getenv("DOCUMENT_AI_EXPENSE_PROCESSOR_ID") or "").strip()
+    hebrew_id = (os.getenv("DOCUMENT_AI_HEBREW_PROCESSOR_ID") or "").strip()
+
+    if language_hint == "he" and hebrew_id:
+        return hebrew_id, "hebrew"
+    if not default_id:
+        # Last-resort: if the Hebrew processor is set and the default
+        # isn't, use Hebrew. Avoids hard-fail when only one is configured.
+        if hebrew_id:
+            return hebrew_id, "hebrew"
+        raise OcrError(
+            "Neither DOCUMENT_AI_EXPENSE_PROCESSOR_ID nor "
+            "DOCUMENT_AI_HEBREW_PROCESSOR_ID is set"
+        )
+    return default_id, "default"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -213,6 +251,7 @@ def _documentai_parse(
     image_bytes: Optional[bytes],
     mime_type: str,
     gcs_uri: Optional[str],
+    language_hint: str = "auto",
 ) -> ExpenseParseResult:
     """
     Real Document AI call. Lazy SDK import.
@@ -220,20 +259,20 @@ def _documentai_parse(
     Required env:
       GOOGLE_CLOUD_PROJECT             (set by Cloud Run automatically)
       DOCUMENT_AI_LOCATION             e.g. "me-west1" or "us"
-      DOCUMENT_AI_EXPENSE_PROCESSOR_ID the processor's resource id
+      DOCUMENT_AI_EXPENSE_PROCESSOR_ID default Expense Parser id
+      DOCUMENT_AI_HEBREW_PROCESSOR_ID  (P2-03) Hebrew-tuned custom
+                                        processor id; used when
+                                        language_hint="he".
     """
     from google.cloud import documentai  # type: ignore  # noqa: I001
     import json
 
     project = os.getenv("GOOGLE_CLOUD_PROJECT")
     location = os.getenv("DOCUMENT_AI_LOCATION", "us")
-    processor_id = os.getenv("DOCUMENT_AI_EXPENSE_PROCESSOR_ID")
+    processor_id, processor_kind = _select_processor_id(language_hint)
 
-    if not (project and processor_id):
-        raise OcrError(
-            "OCR_BACKEND=documentai but GOOGLE_CLOUD_PROJECT or "
-            "DOCUMENT_AI_EXPENSE_PROCESSOR_ID is unset"
-        )
+    if not project:
+        raise OcrError("OCR_BACKEND=documentai but GOOGLE_CLOUD_PROJECT is unset")
 
     client_options = {"api_endpoint": f"{location}-documentai.googleapis.com"}
     client = documentai.DocumentProcessorServiceClient(client_options=client_options)
@@ -256,7 +295,10 @@ def _documentai_parse(
     document = response.document
 
     # ── Map Document AI's expense-parser entities to our shape ──
-    parsed = ExpenseParseResult(backend="documentai")
+    # Stamp which processor variant produced this — useful when grading
+    # confidence (the Hebrew-tuned model should outperform the default
+    # on Israeli invoices; if it doesn't, that's a training signal).
+    parsed = ExpenseParseResult(backend=f"documentai/{processor_kind}")
     field_confidences: dict = {}
 
     for entity in document.entities or []:

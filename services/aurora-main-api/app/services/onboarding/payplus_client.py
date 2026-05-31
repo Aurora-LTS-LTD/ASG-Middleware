@@ -34,12 +34,60 @@ REAL-WORLD ANALOGY:
 """
 
 import datetime
+import logging
 import os
 import uuid
 
+import httpx
+
+log = logging.getLogger(__name__)
 
 PAYPLUS_BACKEND = (os.getenv("PAYPLUS_BACKEND") or "stub").strip().lower()
 PAYPLUS_API_BASE = os.getenv("PAYPLUS_API_BASE") or "https://restapi.payplus.co.il/api/v1.0"
+
+
+# ─────────────────────────────────────────────────────────────
+# Exceptions
+# ─────────────────────────────────────────────────────────────
+class PayPlusError(Exception):
+    """
+    Raised when PayPlus returns a non-success HTTP status or a network
+    transport error. Maps to HTTP 503 at the router / billing-sweep level.
+    Declined cards are NOT raised — they return {"status": "failed"}.
+    """
+    def __init__(self, detail: str):
+        super().__init__(f"PayPlus error: {detail}")
+
+
+# ─────────────────────────────────────────────────────────────
+# Internal helpers
+# ─────────────────────────────────────────────────────────────
+def _payplus_backend() -> str:
+    """Read PAYPLUS_BACKEND at call time (not import time) so test env vars work."""
+    return (os.getenv("PAYPLUS_BACKEND") or "stub").strip().lower()
+
+
+def _payplus_creds() -> tuple[str, str]:
+    """
+    Return (api_key, terminal_number).
+
+    Raises ValueError before any network call if credentials are absent or
+    still contain the placeholder values from .env.example.
+    """
+    key = (os.getenv("PAYPLUS_API_KEY") or "").strip()
+    terminal = (os.getenv("PAYPLUS_TERMINAL_NUMBER") or "").strip()
+    if not key or key.upper().startswith("YOUR_"):
+        raise ValueError(
+            "PAYPLUS_API_KEY is not configured. "
+            "Set PAYPLUS_BACKEND=stub for development or supply real credentials "
+            "from the PayPlus merchant portal."
+        )
+    if not terminal or terminal.upper().startswith("YOUR_"):
+        raise ValueError(
+            "PAYPLUS_TERMINAL_NUMBER is not configured. "
+            "Find it in your PayPlus merchant portal → Terminals."
+        )
+    return key, terminal
 
 
 # ─────────────────────────────────────────────────────────────
@@ -76,13 +124,43 @@ def payplus_tokenize(
     if kind not in ("credit_card", "direct_debit"):
         raise ValueError("kind must be 'credit_card' or 'direct_debit'")
 
-    if PAYPLUS_BACKEND == "stub":
+    if _payplus_backend() == "stub":
         return _stub_tokenize(kind, raw_payload)
 
-    # Production path — placeholder for the eventual httpx call
-    raise NotImplementedError(
-        "Live PayPlus tokenization lands when PAYPLUS_API_KEY is provisioned."
-    )
+    # Production path.
+    # The PayPlus iframe already validated the card with PayPlus's servers
+    # before the browser POSTed to Aurora. The token in raw_payload is
+    # genuine — no server-to-server confirmation call is needed here.
+    # Aurora's role is to extract and normalize the display-only metadata
+    # that PayPlus's iframe included in its postMessage payload.
+    _payplus_creds()  # fail loudly before touching raw_payload if misconfigured
+
+    token = (raw_payload.get("token") or "").strip()
+    if not token:
+        raise ValueError(
+            "PayPlus iframe payload missing 'token'. "
+            "Ensure the frontend reads the postMessage from the PayPlus iframe correctly."
+        )
+
+    common = {
+        "provider": "payplus",
+        "provider_token": token,
+    }
+    if kind == "credit_card":
+        return {
+            **common,
+            "card_last4":     str(raw_payload.get("card_last4") or "")[-4:] or None,
+            "card_brand":     (raw_payload.get("card_brand") or "").lower() or None,
+            "card_exp_month": int(raw_payload["card_exp_month"]) if raw_payload.get("card_exp_month") else None,
+            "card_exp_year":  int(raw_payload["card_exp_year"]) if raw_payload.get("card_exp_year") else None,
+        }
+    # direct_debit
+    return {
+        **common,
+        "bank_code":     str(raw_payload.get("bank_code") or "")[:4] or None,
+        "branch_code":   str(raw_payload.get("branch_code") or "")[:4] or None,
+        "account_last4": str(raw_payload.get("account_last4") or "")[-4:] or None,
+    }
 
 
 def _stub_tokenize(kind: str, raw: dict) -> dict:
@@ -141,7 +219,7 @@ def payplus_charge(
     if not idempotency_key:
         raise ValueError("idempotency_key is required (prevents double-charge on retry)")
 
-    if PAYPLUS_BACKEND == "stub":
+    if _payplus_backend() == "stub":
         # Deterministic outcome: stub_TOKEN succeeds; tokens starting with
         # "fail_" simulate decline. This lets tests drive both branches.
         if provider_token.startswith("fail_"):
@@ -158,7 +236,83 @@ def payplus_charge(
             "failure_message": None,
         }
 
-    # Production path — placeholder
-    raise NotImplementedError(
-        "Live PayPlus charges land when PAYPLUS_API_KEY is provisioned."
-    )
+    # Production path — POST to PayPlus ChargeByToken.
+    # NOTE: PayPlus rate limit is ~60 req/min per terminal. The billing sweep
+    # (internal.py) processes payments sequentially; ensure the sweep cron
+    # interval is ≥3 min for batches up to 100 payments.
+    api_key, terminal = _payplus_creds()
+    api_base = (os.getenv("PAYPLUS_API_BASE") or "https://restapi.payplus.co.il/api/v1.0").rstrip("/")
+
+    # PayPlus amounts are decimal ILS (not agorot). 1000 agorot = 10.00 ILS.
+    amount_ils = round(amount_minor_units / 100, 2)
+
+    body = {
+        "terminal_number": terminal,
+        "api_key": api_key,
+        "payload": {
+            "purchase_description": description or "Aurora LTS subscription",
+        },
+        "credit_card_info": {
+            "token": provider_token,
+            "amount": amount_ils,
+            "currency_id": "1",          # 1 = ILS in PayPlus's enum
+            "number_of_payments": 1,
+        },
+    }
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{api_base}/Transaction/ChargeByToken",
+                json=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": api_key,
+                    "Idempotency-Key": idempotency_key,
+                },
+            )
+    except httpx.RequestError as exc:
+        log.error("[payplus] network error during charge idempotency_key=%s: %s",
+                  idempotency_key, exc)
+        raise PayPlusError(f"Network error: {exc}") from exc
+
+    if resp.status_code not in (200, 201):
+        log.error("[payplus] HTTP %s for charge idempotency_key=%s body=%s",
+                  resp.status_code, idempotency_key, resp.text[:300])
+        raise PayPlusError(f"HTTP {resp.status_code} from PayPlus")
+
+    try:
+        data = resp.json()
+    except Exception as exc:
+        raise PayPlusError(f"Non-JSON response from PayPlus: {resp.text[:200]}") from exc
+
+    results = data.get("results", {})
+    status_flag = results.get("status")   # 1 = success, 0 = failure/decline
+
+    if status_flag == 1:
+        uid = (
+            data.get("data", {})
+                .get("transaction_details", {})
+                .get("uid")
+        )
+        log.info("[payplus] charge succeeded uid=%s idempotency_key=%s amount=%.2f ILS",
+                 uid, idempotency_key, amount_ils)
+        return {
+            "status": "succeeded",
+            "provider_charge_id": uid,
+            "failure_code": None,
+            "failure_message": None,
+        }
+
+    # status_flag == 0 or missing — card declined or mandate rejected.
+    # This is a business outcome, not a system error — do NOT raise.
+    failure_code = str(results.get("code") or "unknown")
+    failure_msg  = str(results.get("message") or "Charge declined")
+    log.warning("[payplus] charge declined code=%s msg=%s idempotency_key=%s",
+                failure_code, failure_msg, idempotency_key)
+    return {
+        "status": "failed",
+        "provider_charge_id": None,
+        "failure_code": failure_code,
+        "failure_message": failure_msg,
+    }

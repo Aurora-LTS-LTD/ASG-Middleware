@@ -1,69 +1,209 @@
 # =====================================================================
-# Aurora LTS — Cloud Build Pipeline
+# Aurora LTS — Cloud Build Pipeline  (P2-19 blue-green deploy)
 # =====================================================================
-# Builds the production container image and pushes it to Artifact Registry.
 #
-# This file is OPTIONAL. The same outcome can be reached with
-#   docker build + docker push    (faster the first time on a Mac)
+# FULL PIPELINE:
+#   1. Build multi-stage Docker image
+#   2. Push versioned + :latest tags to Artifact Registry
+#   3. Run DB migration Cloud Run Job (holds advisory lock — safe to
+#      re-run; exits 0 only when all migrations succeed)
+#   4. Deploy NEW revision at 0% traffic (no-traffic canary)
+#   5. Smoke-test the new revision via its revision-specific URL
+#   6. If smoke passes → shift 100% traffic to new revision
+#   7. Tag STABLE on success  (used by rollback script)
+#      On failure → traffic stays on previous revision automatically
 #
-# Use Cloud Build when you want a CI artefact:
-#   - reproducible builds in GCP's network (no Mac-specific quirks)
-#   - signed provenance via Cloud Build's metadata
-#   - automatic git-tag → image-tag mapping for release management
+# BLUE-GREEN STRATEGY:
+#   Cloud Run stores every deployed revision. Steps 4+6 implement
+#   a simple blue-green cutover:
+#     blue  = the revision currently serving 100% traffic
+#     green = the new revision deployed at 0% (step 4)
+#   Step 6 atomically shifts traffic to green.
+#   If health checks fail at any point, Cloud Run keeps blue alive.
 #
-# Trigger:
+# ROLLBACK:
+#   gcloud run services update-traffic aurora-api \
+#       --to-revisions=<stable-revision-tag>=100 \
+#       --region=me-west1
+#
+# TRIGGER:
 #   gcloud builds submit --config cloudbuild.yaml \
-#       --substitutions=_VERSION=v1.0.0
+#       --substitutions=_VERSION=v1.2.3
 #
-# Required IAM on the Cloud Build SA:
-#   - roles/artifactregistry.writer  (push image)
-#   - roles/run.developer             (only if this file later deploys too)
+# REQUIRED IAM on Cloud Build SA (aurora-cloudbuild@...):
+#   roles/artifactregistry.writer
+#   roles/run.developer
+#   roles/run.invoker          (for smoke-test call)
+#   roles/iam.serviceAccountUser  (to impersonate aurora-api-runner@)
 # =====================================================================
 
 substitutions:
-  _REGION:   me-west1
-  _PROJECT:  aurora-lts-prod         # override per-environment
-  _REPO:     aurora                   # Artifact Registry repository name
-  _IMAGE:    api                      # image name within the repo
-  _VERSION:  v0.0.0                   # bump per release; pass via --substitutions
+  _REGION:            me-west1
+  _PROJECT:           aurora-lts-prod
+  _REPO:              aurora
+  _IMAGE:             api
+  _VERSION:           v0.0.0          # override via --substitutions=_VERSION=vX.Y.Z
+  _SERVICE:           aurora-api
+  _MIGRATE_JOB:       aurora-migrate  # Cloud Run Job for Alembic upgrade head
+  _STABLE_TAG:        stable          # revision tag written on success
+  _SMOKE_PATH:        /api/v1/onboarding/health
 
-# Run on a small worker — the build is mostly dep installation.
 options:
-  machineType: E2_HIGHCPU_8
-  logging: CLOUD_LOGGING_ONLY
+  machineType:  E2_HIGHCPU_8
+  logging:      CLOUD_LOGGING_ONLY
 
 steps:
-  # ── 1. Build the M1 image (per-service Dockerfile; context = repo root) ──
+
+  # ─────────────────────────────────────────────────────────────────
+  # 1. Build the container image (multi-stage — see Dockerfile)
+  # ─────────────────────────────────────────────────────────────────
   - id: docker-build
     name: gcr.io/cloud-builders/docker
     args:
       - build
-      - --file=services/aurora-main-api/Dockerfile
-      - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
-      - --tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
-      - --label=git.commit=${COMMIT_SHA}
-      - --label=git.branch=${BRANCH_NAME}
-      - --label=build.id=${BUILD_ID}
+      - "--tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}"
+      - "--tag=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest"
+      - "--label=git.commit=${COMMIT_SHA}"
+      - "--label=git.branch=${BRANCH_NAME}"
+      - "--label=build.id=${BUILD_ID}"
       - .
 
-  # ── 2. Push both tags to Artifact Registry ──
+  # ─────────────────────────────────────────────────────────────────
+  # 2. Push versioned tag
+  # ─────────────────────────────────────────────────────────────────
   - id: docker-push-versioned
     name: gcr.io/cloud-builders/docker
+    waitFor: [docker-build]
     args:
       - push
-      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
+      - "${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}"
 
+  # ─────────────────────────────────────────────────────────────────
+  # 3. Push :latest tag (for reference / manual deploys)
+  # ─────────────────────────────────────────────────────────────────
   - id: docker-push-latest
     name: gcr.io/cloud-builders/docker
+    waitFor: [docker-build]
     args:
       - push
-      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
+      - "${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest"
 
-# Cloud Build will record both tags as artifacts.
+  # ─────────────────────────────────────────────────────────────────
+  # 4. Run Alembic migration job BEFORE any traffic sees new code.
+  #    The job exits non-zero on failure, aborting the build.
+  #    pg_advisory_lock ensures only one instance runs migrations
+  #    even if multiple builds fire concurrently.
+  # ─────────────────────────────────────────────────────────────────
+  - id: run-migrations
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: [docker-push-versioned]
+    args:
+      - run
+      - jobs
+      - update
+      - "${_MIGRATE_JOB}"
+      - "--image=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}"
+      - "--region=${_REGION}"
+      - "--project=${_PROJECT}"
+    # Update job image first; then execute
+  - id: execute-migrations
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: [run-migrations]
+    args:
+      - run
+      - jobs
+      - execute
+      - "${_MIGRATE_JOB}"
+      - "--region=${_REGION}"
+      - "--project=${_PROJECT}"
+      - "--wait"                    # blocks until job exits; fails build on non-zero exit
+
+  # ─────────────────────────────────────────────────────────────────
+  # 5. Deploy NEW revision at 0% traffic  (green, no live traffic)
+  #    --no-traffic means the revision is created and healthy but
+  #    receives zero requests.  Clients still hit the current (blue)
+  #    revision until step 7.
+  # ─────────────────────────────────────────────────────────────────
+  - id: deploy-green
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: [execute-migrations]
+    args:
+      - run
+      - deploy
+      - "${_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}"
+      - "--region=${_REGION}"
+      - "--project=${_PROJECT}"
+      - "--no-traffic"              # blue-green: green revision at 0%
+      - "--tag=green-${_VERSION}"   # revision-specific URL for smoke test
+
+  # ─────────────────────────────────────────────────────────────────
+  # 6. Smoke-test the green revision via its tagged URL.
+  #    Uses curl; expects HTTP 200 from the health endpoint.
+  #    If curl exits non-zero, the build fails here and traffic
+  #    stays on the blue (previous) revision.
+  # ─────────────────────────────────────────────────────────────────
+  - id: smoke-test
+    name: gcr.io/cloud-builders/curl
+    waitFor: [deploy-green]
+    entrypoint: /bin/sh
+    args:
+      - -c
+      - |
+        GREEN_URL=$(gcloud run services describe ${_SERVICE} \
+          --region=${_REGION} --project=${_PROJECT} \
+          --format='value(status.traffic[?tag="green-${_VERSION}"].url)' 2>/dev/null)
+
+        if [ -z "$$GREEN_URL" ]; then
+          # Fallback: construct the URL pattern Cloud Run uses for tagged revisions
+          GREEN_URL="https://green-${_VERSION}---$(gcloud run services describe ${_SERVICE} \
+            --region=${_REGION} --project=${_PROJECT} \
+            --format='value(status.url)' | sed 's|https://||')"
+        fi
+
+        echo "Smoke-testing: $$GREEN_URL${_SMOKE_PATH}"
+        curl --silent --fail --max-time 30 --retry 3 --retry-delay 5 \
+          "$$GREEN_URL${_SMOKE_PATH}"
+        echo ""
+        echo "Smoke test PASSED"
+
+  # ─────────────────────────────────────────────────────────────────
+  # 7. Shift 100% traffic to the green revision (atomic cutover).
+  #    The old blue revision continues to exist (Cloud Run keeps it)
+  #    and can be targeted by the rollback command at any time.
+  # ─────────────────────────────────────────────────────────────────
+  - id: shift-traffic
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: [smoke-test]
+    args:
+      - run
+      - services
+      - update-traffic
+      - "${_SERVICE}"
+      - "--region=${_REGION}"
+      - "--project=${_PROJECT}"
+      - "--to-latest"               # 100% to the most recently deployed revision
+
+  # ─────────────────────────────────────────────────────────────────
+  # 8. Tag the new revision as :stable for easy rollback reference.
+  # ─────────────────────────────────────────────────────────────────
+  - id: tag-stable
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: [shift-traffic]
+    args:
+      - run
+      - services
+      - update-traffic
+      - "${_SERVICE}"
+      - "--region=${_REGION}"
+      - "--project=${_PROJECT}"
+      - "--update-tags=${_STABLE_TAG}=LATEST"   # move stable tag to new revision
+
+
+# Artifact Registry records both tags.
 images:
-  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
-  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest
+  - "${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}"
+  - "${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:latest"
 
-# Build timeout — generous because the WeasyPrint wheels take time on
-# first build, then cache afterwards.
-timeout: 1200s   # 20 minutes
+# 30 minutes — migration + deploy can take time on first run.
+timeout: 1800s

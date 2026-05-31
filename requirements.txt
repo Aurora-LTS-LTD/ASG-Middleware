@@ -39,3 +39,27 @@ google-cloud-bigquery>=3.20,<4
 
 # ── Product Upgrade #1 — Gemini Flash via Vertex AI (lazy-imported) ──
 google-cloud-aiplatform>=1.55,<2
+
+# ── P0-06 — OTP delivery + phone validation ──
+# phonenumbers: E.164 normalization + Israeli number validation before dispatch
+phonenumbers>=9.0,<10
+
+# ── P0-09 — IP-level rate limiting ──
+# slowapi: FastAPI-native rate limiting, decorator-based.
+# limits: storage backends (memory for dev, Redis for production Cloud Run).
+# RATE_LIMIT_BACKEND=memory (default) | redis (requires REDIS_URL)
+slowapi>=0.1.9,<1.0
+limits>=3.6,<4
+
+# ── P1-02 — Schema versioning via Alembic ──
+# New schema changes go through `alembic revision --autogenerate`.
+# Existing migrate_phase*.py files are frozen as-is and continue to run
+# (idempotent). On first boot Alembic stamps the current schema as
+# baseline "0001"; subsequent boots upgrade head if new revisions exist.
+alembic>=1.13,<2
+
+# ── P2-01 — Recurring invoice cadence math ──
+# dateutil.relativedelta handles month-aware "+1 month" without drift
+# (Jan 31 + 1 month → Feb 28/29, not "March 3"). Python's stdlib
+# timedelta cannot express "1 month" — only fixed durations.
+python-dateutil>=2.9,<3

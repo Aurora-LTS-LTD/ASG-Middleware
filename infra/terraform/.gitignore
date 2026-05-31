@@ -1,0 +1,15 @@
+# Terraform local state (real state lives in GCS — see versions.tf backend).
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Plan output files
+*.tfplan
+plan.out
+
+# Local override files — never commit.
+*.auto.tfvars
+override.tf
+override.tf.json
