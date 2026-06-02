@@ -38,7 +38,7 @@ import httpx
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.database.models import FxRate
+from aurora_shared.database.models import FxRate
 
 log = logging.getLogger(__name__)
 

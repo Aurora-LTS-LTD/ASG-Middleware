@@ -23,9 +23,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.middleware.auth_middleware import require_admin
-from app.middleware.rate_limit import limiter
+from aurora_shared.database import get_db
+from aurora_shared.middleware.auth_middleware import require_admin
+from aurora_shared.middleware.rate_limit import limiter
 from app.services.autonomous.registry import get_service, list_services
 
 log = logging.getLogger(__name__)

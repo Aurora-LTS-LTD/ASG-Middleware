@@ -28,8 +28,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.middleware.auth_middleware import get_current_user, require_admin
+from aurora_shared.database import get_db
+from aurora_shared.middleware.auth_middleware import get_current_user, require_admin
 from app.services.realtime.push_notifications import sse_stream, send_push, EVENTS
 
 log = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ async def register_push_token(
     The token is used by the push notification service when background
     events are published.
     """
-    from app.database.models import NativeDeviceKey, AccountantDevice
+    from aurora_shared.database.models import NativeDeviceKey, AccountantDevice
 
     token = req.device_token.strip()
     if len(token) < 32:
@@ -131,7 +131,7 @@ async def deregister_push_token(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ) -> dict:
-    from app.database.models import NativeDeviceKey, AccountantDevice
+    from aurora_shared.database.models import NativeDeviceKey, AccountantDevice
 
     cleared = 0
     for row in db.query(NativeDeviceKey).filter_by(user_id=current_user.id).all():

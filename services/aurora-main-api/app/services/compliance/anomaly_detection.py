@@ -43,8 +43,8 @@ from typing import List, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.database import ActionLog
-from app.database.models import AnomalyEvent
+from aurora_shared.database import ActionLog
+from aurora_shared.database.models import AnomalyEvent
 
 log = logging.getLogger(__name__)
 

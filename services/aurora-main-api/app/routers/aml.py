@@ -34,9 +34,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database import get_db, ActionLog
-from app.database.models import SanctionsListEntry, SanctionsScreeningHit
-from app.middleware.auth_middleware import require_admin, get_current_user
+from aurora_shared.database import get_db, ActionLog
+from aurora_shared.database.models import SanctionsListEntry, SanctionsScreeningHit
+from aurora_shared.middleware.auth_middleware import require_admin, get_current_user
 from app.services.compliance.sanctions import (
     screen_name,
     screen_multiple,

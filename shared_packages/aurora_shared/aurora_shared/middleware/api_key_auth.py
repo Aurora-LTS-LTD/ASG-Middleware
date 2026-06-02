@@ -7,7 +7,7 @@ partners). Pair this with rate limiting + an explicit scope check
 when adding it to a route.
 
 USAGE:
-    from app.middleware.api_key_auth import require_api_key
+    from aurora_shared.middleware.api_key_auth import require_api_key
 
     @router.post("/api/v1/relay/webhook")
     def handle_webhook(
@@ -34,8 +34,8 @@ from typing import Callable, Optional
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.database.models import ApiKey
+from aurora_shared.database import get_db
+from aurora_shared.database.models import ApiKey
 
 log = logging.getLogger(__name__)
 

@@ -254,8 +254,8 @@ def send_push_to_users(event_key: str, user_ids: List[int], data: dict = None) -
     Also broadcasts to in-memory SSE bus.
     Returns {sent: N, failed: N}.
     """
-    from app.database.connection import SessionLocal
-    from app.database.models import NativeDeviceKey, AccountantDevice
+    from aurora_shared.database.connection import SessionLocal
+    from aurora_shared.database.models import NativeDeviceKey, AccountantDevice
 
     event = EVENTS.get(event_key)
     if not event:

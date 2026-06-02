@@ -81,7 +81,7 @@ from app.services.onboarding import (
     OnboardingError,
 )
 from app.services.onboarding.otp_service import OtpDeliveryError
-from app.middleware.rate_limit import limiter
+from aurora_shared.middleware.rate_limit import limiter
 
 
 # ─────────────────────────────────────────────────────────────

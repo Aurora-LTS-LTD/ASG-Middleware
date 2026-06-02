@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.middleware.auth_middleware import get_current_user, get_business_filter
+from aurora_shared.database import get_db
+from aurora_shared.middleware.auth_middleware import get_current_user, get_business_filter
 from app.services.payment_links import (
     create_payment_link, resolve_payment_link,
     create_payplus_checkout, handle_payplus_ipn,
@@ -29,7 +29,7 @@ async def create_link(
     current_user=Depends(get_current_user),
 ) -> dict:
     biz_filter = get_business_filter(current_user)
-    from app.database.models import Invoice
+    from aurora_shared.database.models import Invoice
     invoice = db.query(Invoice).filter_by(id=invoice_id).first()
     if not invoice:
         raise HTTPException(404, "Invoice not found")

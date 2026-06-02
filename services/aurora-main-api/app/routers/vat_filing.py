@@ -31,9 +31,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.database.models import VatReturn
-from app.middleware.auth_middleware import get_current_user, require_admin, get_business_filter
+from aurora_shared.database import get_db
+from aurora_shared.database.models import VatReturn
+from aurora_shared.middleware.auth_middleware import get_current_user, require_admin, get_business_filter
 from app.services.ita.vat_filing import (
     prepare_return,
     submit_return,

@@ -30,7 +30,7 @@ from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
 
-from app.database.models import BankStatementEntry, Invoice
+from aurora_shared.database.models import BankStatementEntry, Invoice
 
 log = logging.getLogger(__name__)
 

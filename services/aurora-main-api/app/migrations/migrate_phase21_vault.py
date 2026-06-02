@@ -48,8 +48,8 @@ from typing import Tuple
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError, ProgrammingError, OperationalError
 
-from app.database.connection import engine, SessionLocal
-from app.database.models import Organization, VaultIngestionAddress
+from aurora_shared.database.connection import engine, SessionLocal
+from aurora_shared.database.models import Organization, VaultIngestionAddress
 
 log = logging.getLogger(__name__)
 

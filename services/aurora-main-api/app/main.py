@@ -30,9 +30,9 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 
-from app.database import create_tables, get_db, Business, User, SessionLocal
-from app.middleware.auth_middleware import get_current_user, require_admin
-from app.middleware.rate_limit import limiter
+from aurora_shared.database import create_tables, get_db, Business, User, SessionLocal
+from aurora_shared.middleware.auth_middleware import get_current_user, require_admin
+from aurora_shared.middleware.rate_limit import limiter
 from app.routers.whatsapp import router as whatsapp_router
 from app.routers.invoices import router as invoices_router
 from app.routers.auth import router as auth_router
@@ -49,7 +49,7 @@ from app.routers.marketing import router as marketing_router                 # S
 from app.routers.admin_break_glass import router as admin_break_glass_router # Track 3 — Break-glass JWT lifecycle (IAP-only)
 from app.routers.admin_users import router as admin_users_router             # Track 4 — Admin users + orgs list (feeds aurora-admin-ui)
 from app.routers.admin_exec import router as admin_exec_router               # Appendix H — Tier 1 CEO Executive Dashboard backend
-from app.routers.native_shell import router as native_shell_router           # Sprint 8.2 — Aurora Mac Shell hardware binding (Phase 20)
+# native_shell lives in M2 (aurora-api-core) per the monorepo split — not mounted on M1.
 from app.routers.accountant_auth import router as accountant_auth_router    # Sprint 8.2 sibling — Accountant Portal auth (Phase 21)
 from app.routers.accountant_dashboard import router as accountant_dashboard_router  # P1-16 — Accountant Portal dashboard KPIs
 from app.routers.accountant_vault import router as accountant_vault_router          # P1-17 — Accountant Portal manual vault upload
@@ -133,14 +133,14 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # from Cloud Run / Global LB). Echoed back in the response so clients
 # can quote it when filing tickets. Exposed via contextvars to
 # background tasks + the structured logger.
-from app.middleware.request_id import RequestIDMiddleware
+from aurora_shared.middleware.request_id import RequestIDMiddleware
 app.add_middleware(RequestIDMiddleware)
 
 # ── Global exception handlers (P1-06) ──
 # HTTPException re-emitted with request_id attached.
 # Uncaught Exception logged with full traceback + request_id, returned
 # to client as a safe JSON envelope (no traceback leak).
-from app.middleware.error_handlers import register_exception_handlers
+from aurora_shared.middleware.error_handlers import register_exception_handlers
 register_exception_handlers(app)
 
 
@@ -207,7 +207,7 @@ app.include_router(marketing_router)         # Sprint 7 — POST /api/v1/marketi
 app.include_router(admin_break_glass_router) # Track 3 — list + revoke break-glass tokens (IAP-strict)
 app.include_router(admin_users_router)       # Track 4 — admin users + orgs list (consumed by aurora-admin-ui)
 app.include_router(admin_exec_router)        # Appendix H — Tier 1 CEO Executive Dashboard endpoints
-app.include_router(native_shell_router)      # Sprint 8.2 — Aurora Mac Shell handshake + device list/revoke
+# native_shell_router served by M2 (aurora-api-core), not M1.
 app.include_router(accountant_auth_router)   # Sprint 8.2 sibling — Accountant Portal OTP + device mgmt
 app.include_router(accountant_dashboard_router)  # P1-16 — Accountant Portal dashboard KPIs
 app.include_router(accountant_vault_router)      # P1-17 — Accountant Portal manual vault upload
@@ -322,7 +322,7 @@ async def startup():
             try:
                 admin = db.query(User).filter(User.role == "admin").first()
                 if not admin:
-                    from app.services.auth_service import hash_password
+                    from aurora_shared.services.auth_service import hash_password
                     admin = User(
                         email=_seed_email,
                         password_hash=hash_password(_seed_password),
@@ -731,7 +731,7 @@ def create_business(
       existing keys, so existing dashboard JS continues to work.
     """
     # Lazy import to avoid a circular dependency at module load time.
-    from app.services.identity import (
+    from aurora_shared.services.identity import (
         get_or_create_organization_for_business,
         add_membership,
     )

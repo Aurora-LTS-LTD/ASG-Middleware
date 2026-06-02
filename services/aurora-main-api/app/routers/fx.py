@@ -21,10 +21,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.middleware.auth_middleware import get_current_user
-from app.middleware.rate_limit import limiter
-from app.middleware.api_key_auth import require_api_key
+from aurora_shared.database import get_db
+from aurora_shared.middleware.auth_middleware import get_current_user
+from aurora_shared.middleware.rate_limit import limiter
+from aurora_shared.middleware.api_key_auth import require_api_key
 from app.services.fx_rates import (
     get_rate_to_ils,
     refresh_boi_rates,
@@ -85,7 +85,7 @@ def get_rate(
         raise HTTPException(status_code=503, detail=str(exc))
 
     # Pull the actual row for the date stamp.
-    from app.database.models import FxRate
+    from aurora_shared.database.models import FxRate
     row = (
         db.query(FxRate)
         .filter(FxRate.currency == currency)

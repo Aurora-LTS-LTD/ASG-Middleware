@@ -24,8 +24,8 @@ if _SERVER_FILES not in sys.path:
     sys.path.insert(0, _SERVER_FILES)
 
 # Pull metadata from the same Base every model uses.
-from app.database.connection import Base  # noqa: E402
-import app.database.models  # noqa: F401,E402 — registers all model classes
+from aurora_shared.database.connection import Base  # noqa: E402
+import aurora_shared.database.models  # noqa: F401,E402 — registers all model classes
 
 
 config = context.config

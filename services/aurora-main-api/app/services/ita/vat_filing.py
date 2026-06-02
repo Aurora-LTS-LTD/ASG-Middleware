@@ -59,8 +59,8 @@ from typing import List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.database import ActionLog
-from app.database.models import VatReturn, Business
+from aurora_shared.database import ActionLog
+from aurora_shared.database.models import VatReturn, Business
 
 log = logging.getLogger(__name__)
 

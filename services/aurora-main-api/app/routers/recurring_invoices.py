@@ -27,11 +27,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.database.models import RecurringInvoiceSchedule, User, Business
-from app.middleware.auth_middleware import get_current_user, require_admin
-from app.middleware.rate_limit import limiter
-from app.middleware.api_key_auth import require_api_key
+from aurora_shared.database import get_db
+from aurora_shared.database.models import RecurringInvoiceSchedule, User, Business
+from aurora_shared.middleware.auth_middleware import get_current_user, require_admin
+from aurora_shared.middleware.rate_limit import limiter
+from aurora_shared.middleware.api_key_auth import require_api_key
 from app.services.recurring_invoice import (
     tick_due_schedules,
     VALID_CADENCES,

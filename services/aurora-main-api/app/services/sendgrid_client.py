@@ -101,6 +101,63 @@ def _send(to_email: str, subject: str, html: str, plain: str) -> None:
 # Public API
 # ──────────────────────────────────────────────────────────────────────────────
 
+def send_template_email(
+    to_email: str,
+    to_name: str,
+    subject: str,
+    template_id: str,
+    dynamic_data: dict,
+) -> None:
+    """
+    Send a SendGrid dynamic-template email. Used by the lead-nurture engine
+    (NURTURE_BACKEND=sendgrid). No-ops (logs a warning) if SENDGRID_API_KEY is
+    unset; raises RuntimeError on HTTP/network error so callers can wrap → 503.
+    """
+    key = _api_key()
+    if not key:
+        log.warning(
+            "[sendgrid] SENDGRID_API_KEY not set — template email NOT sent to %s",
+            to_email,
+        )
+        return
+
+    personalization = {
+        "to": [{"email": to_email, "name": to_name}],
+        "dynamic_template_data": dynamic_data or {},
+    }
+    if subject:
+        personalization["subject"] = subject
+
+    payload = {
+        "personalizations": [personalization],
+        "from": {"email": _from_address(), "name": _from_name()},
+        "template_id": template_id,
+    }
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(
+                _SENDGRID_API,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                },
+            )
+        if resp.status_code not in (200, 202):
+            log.error(
+                "[sendgrid] template send failed status=%s body=%s to=%s",
+                resp.status_code, resp.text[:300], to_email,
+            )
+            raise RuntimeError(f"SendGrid returned {resp.status_code}")
+        log.info(
+            "[sendgrid] template email queued to=%s template=%s", to_email, template_id
+        )
+    except httpx.RequestError as exc:
+        log.error("[sendgrid] network error sending template to %s: %s", to_email, exc)
+        raise RuntimeError(f"SendGrid network error: {exc}") from exc
+
+
 def send_otp(to_email: str, otp: str) -> None:
     """
     Send a 6-digit OTP to the accountant's work email.

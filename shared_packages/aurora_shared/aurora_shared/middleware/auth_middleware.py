@@ -65,7 +65,7 @@ def _client_ip_hash(request: Request) -> str:
     raw_ip = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
     if not raw_ip and request.client:
         raw_ip = request.client.host or ""
-    from app.config.secrets import require_secret
+    from aurora_shared.config.secrets import require_secret
     salt = require_secret("AURORA_IP_HASH_SALT", min_length=16)
     return hashlib.sha256(f"{salt}:{raw_ip}".encode("utf-8")).hexdigest()
 

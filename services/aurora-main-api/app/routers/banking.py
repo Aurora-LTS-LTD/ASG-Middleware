@@ -28,10 +28,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.database.models import BankStatementEntry, Invoice, User
-from app.middleware.auth_middleware import get_current_user
-from app.middleware.rate_limit import limiter
+from aurora_shared.database import get_db
+from aurora_shared.database.models import BankStatementEntry, Invoice, User
+from aurora_shared.middleware.auth_middleware import get_current_user
+from aurora_shared.middleware.rate_limit import limiter
 from app.services.reconciliation import reconcile_pending
 
 log = logging.getLogger(__name__)

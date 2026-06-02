@@ -16,10 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.database.models import Invoice, InvoicePayment, User
-from app.middleware.auth_middleware import get_current_user
-from app.middleware.rate_limit import limiter
+from aurora_shared.database import get_db
+from aurora_shared.database.models import Invoice, InvoicePayment, User
+from aurora_shared.middleware.auth_middleware import get_current_user
+from aurora_shared.middleware.rate_limit import limiter
 from app.services.payments_service import (
     compute_balance, record_payment, PaymentError,
 )

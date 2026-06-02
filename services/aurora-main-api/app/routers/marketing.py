@@ -49,7 +49,7 @@ from aurora_shared.database import (
     ActionLog,
     MarketingLead,
 )
-from app.middleware.rate_limit import limiter
+from aurora_shared.middleware.rate_limit import limiter
 
 
 # ─────────────────────────────────────────────────────────────

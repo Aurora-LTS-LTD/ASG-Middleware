@@ -58,8 +58,8 @@ from aurora_shared.database.models import (
     AccountantEngagement,
     ActionLog,
 )
-from app.middleware.auth_middleware import require_accountant  # noqa: F401 — re-exported for Vault router
-from app.middleware.rate_limit import limiter
+from aurora_shared.middleware.auth_middleware import require_accountant  # noqa: F401 — re-exported for Vault router
+from aurora_shared.middleware.rate_limit import limiter
 from app.services import sendgrid_client
 
 log = logging.getLogger(__name__)

@@ -81,7 +81,7 @@ def _step_up_secret() -> bytes:
     the variable is unset; in production it raises RuntimeError and
     prevents startup — so a missing secret can never silently forge tokens.
     """
-    from app.config.secrets import require_secret
+    from aurora_shared.config.secrets import require_secret
     return require_secret("WEBAUTHN_STEP_UP_SECRET", min_length=32).encode("utf-8")
 
 

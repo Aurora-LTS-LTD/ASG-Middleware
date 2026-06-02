@@ -64,8 +64,8 @@ from typing import List, Optional, Tuple
 import httpx  # already in requirements for async HTTP
 from sqlalchemy.orm import Session
 
-from app.database import ActionLog
-from app.database.models import SanctionsListEntry, SanctionsScreeningHit
+from aurora_shared.database import ActionLog
+from aurora_shared.database.models import SanctionsListEntry, SanctionsScreeningHit
 
 log = logging.getLogger(__name__)
 

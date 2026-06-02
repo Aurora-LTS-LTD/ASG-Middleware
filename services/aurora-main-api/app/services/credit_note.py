@@ -31,7 +31,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database.models import Invoice
+from aurora_shared.database.models import Invoice
 from app.services.tax_compliance import calculate_vat
 from app.services.invoice_service import generate_invoice_number
 

@@ -67,7 +67,7 @@ def resolve_seller_tax_id(invoice, db: Session) -> str:
 
     # Path 2: explicit lookup if relationship isn't populated.
     if not raw and business_id is not None:
-        from app.database import Business
+        from aurora_shared.database import Business
         biz = db.query(Business).filter(Business.id == business_id).first()
         if biz is not None:
             raw = biz.tax_id
@@ -75,7 +75,7 @@ def resolve_seller_tax_id(invoice, db: Session) -> str:
     # Path 3: the paired Organization.
     if not raw and business_id is not None:
         try:
-            from app.services.identity import get_or_create_organization_for_business
+            from aurora_shared.services.identity import get_or_create_organization_for_business
             org = get_or_create_organization_for_business(business_id, db)
             raw = getattr(org, "tax_id", None)
         except Exception as exc:

@@ -2,7 +2,7 @@
 from __future__ import annotations
 import logging
 from sqlalchemy import inspect, text
-from app.database.connection import engine
+from aurora_shared.database.connection import engine
 
 log = logging.getLogger(__name__)
 _PG = engine.dialect.name == "postgresql"

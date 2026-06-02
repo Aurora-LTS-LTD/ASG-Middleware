@@ -51,7 +51,7 @@ from fastapi import Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.database.connection import DIALECT, SessionLocal
+from aurora_shared.database.connection import DIALECT, SessionLocal
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def tenant_scoped_db(
     a circular import at module load time.
     """
     # Lazy import — auth_middleware imports database, which imports us.
-    from app.middleware.auth_middleware import get_current_user as _get_current_user  # noqa: F401
+    from aurora_shared.middleware.auth_middleware import get_current_user as _get_current_user  # noqa: F401
 
     # Resolve current_user lazily — FastAPI rewires Depends at runtime.
     db = SessionLocal()

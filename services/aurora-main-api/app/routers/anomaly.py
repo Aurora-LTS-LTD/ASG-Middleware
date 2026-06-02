@@ -28,9 +28,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database import get_db, ActionLog
-from app.database.models import AnomalyEvent
-from app.middleware.auth_middleware import require_admin
+from aurora_shared.database import get_db, ActionLog
+from aurora_shared.database.models import AnomalyEvent
+from aurora_shared.middleware.auth_middleware import require_admin
 from app.services.compliance.anomaly_detection import run_daily_scan
 
 log = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ async def trigger_scan(
     log.info("Anomaly scan triggered by admin %d", current_user.id)
 
     def _run() -> None:
-        from app.database.connection import SessionLocal
+        from aurora_shared.database.connection import SessionLocal
         with SessionLocal() as bg_db:
             report = run_daily_scan(bg_db, lookback_days=lookback_days)
             log.info(

@@ -47,8 +47,8 @@ def main() -> int:
     key_hash = hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
 
     # Insert.
-    from app.database.connection import SessionLocal
-    from app.database.models import ApiKey
+    from aurora_shared.database.connection import SessionLocal
+    from aurora_shared.database.models import ApiKey
 
     db = SessionLocal()
     try:

@@ -43,7 +43,7 @@ from typing import Iterator
 
 from sqlalchemy import text
 
-from app.database.connection import engine, DIALECT
+from aurora_shared.database.connection import engine, DIALECT
 
 log = logging.getLogger(__name__)
 

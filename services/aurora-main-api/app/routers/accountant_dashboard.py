@@ -38,9 +38,9 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.middleware.auth_middleware import require_accountant
-from app.middleware.rate_limit import limiter
+from aurora_shared.database import get_db
+from aurora_shared.middleware.auth_middleware import require_accountant
+from aurora_shared.middleware.rate_limit import limiter
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def get_kpis(
     vault_docs_this_month = 0
     active_clients = 0
     try:
-        from app.database.models import ClientDocument, AccountantEngagement
+        from aurora_shared.database.models import ClientDocument, AccountantEngagement
 
         # Active engagements → set of client org ids visible to this accountant.
         active_client_ids = [
@@ -113,7 +113,7 @@ def get_kpis(
     # 2. Active devices — accountant_devices for this user, not revoked.
     active_devices = 0
     try:
-        from app.database.models import AccountantDevice
+        from aurora_shared.database.models import AccountantDevice
         active_devices = (
             db.query(func.count(AccountantDevice.id))
             .filter(

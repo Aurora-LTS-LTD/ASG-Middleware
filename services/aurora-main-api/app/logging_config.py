@@ -39,7 +39,7 @@ import sys
 import time
 from typing import Any, Dict
 
-from app.middleware.request_id import current_request_id
+from aurora_shared.middleware.request_id import current_request_id
 
 
 class JsonFormatter(logging.Formatter):

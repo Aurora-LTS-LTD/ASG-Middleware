@@ -47,7 +47,7 @@ from typing import List, Tuple
 from dateutil.relativedelta import relativedelta
 from sqlalchemy.orm import Session
 
-from app.database.models import RecurringInvoiceSchedule
+from aurora_shared.database.models import RecurringInvoiceSchedule
 from app.services.invoice_service import create_draft_invoice
 
 log = logging.getLogger(__name__)

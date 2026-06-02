@@ -56,7 +56,7 @@ class DailyBriefService(AbstractAutonomousService):
         now = datetime.datetime.utcnow()
         cutoff = now - datetime.timedelta(hours=_WINDOW_HOURS)
 
-        from app.database.models import (
+        from aurora_shared.database.models import (
             Invoice, Receipt, ClientDocument,
         )
 

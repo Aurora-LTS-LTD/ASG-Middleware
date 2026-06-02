@@ -1724,7 +1724,7 @@ def growth_activate_endpoint(
 # ═════════════════════════════════════════════════════════════════════
 
 import secrets as _secrets_acct
-from app.services.auth_service import hash_password as _hash_password_acct
+from aurora_shared.services.auth_service import hash_password as _hash_password_acct
 
 
 class AccountantSeedRequest(BaseModel):

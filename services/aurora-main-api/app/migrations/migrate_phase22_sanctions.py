@@ -30,7 +30,7 @@ import logging
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from app.database.connection import engine, SessionLocal
+from aurora_shared.database.connection import engine, SessionLocal
 
 log = logging.getLogger(__name__)
 

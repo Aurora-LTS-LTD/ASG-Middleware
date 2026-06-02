@@ -44,8 +44,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import ActionLog
-from app.database.models import PaymentLink, Invoice, Business
+from aurora_shared.database import ActionLog
+from aurora_shared.database.models import PaymentLink, Invoice, Business
 from app.config.secrets import optional_secret
 
 log = logging.getLogger(__name__)
@@ -277,14 +277,17 @@ def handle_payplus_ipn(
             link.paid_at = datetime.datetime.utcnow()
             link.payplus_transaction_id = str(payload.get("transaction_uid", ""))
 
-        # Delegate to the payment_service to record a proper Payment row
-        from app.services.payment_service import record_payment
+        # Delegate to payments_service to record a proper InvoicePayment row.
+        # (payments_service is the Aurora module backing the InvoicePayment
+        # model; the legacy payment_service.record_payment has a different
+        # signature and returns a dict.)
+        from app.services.payments_service import record_payment
         record_payment(
+            db=db,
             invoice_id=invoice_id,
-            amount_ils=amount,
+            amount=amount,
             source="payment_link",
             note=f"PayPlus IPN uid={payload.get('transaction_uid')}",
-            db=db,
         )
 
         db.add(ActionLog(

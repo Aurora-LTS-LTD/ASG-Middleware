@@ -28,7 +28,7 @@ import traceback
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.middleware.request_id import current_request_id
+from aurora_shared.middleware.request_id import current_request_id
 
 log = logging.getLogger(__name__)
 

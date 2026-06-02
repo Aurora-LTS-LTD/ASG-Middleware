@@ -49,8 +49,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database import ActionLog
-from app.database.models import MarketingLead
+from aurora_shared.database import ActionLog
+from aurora_shared.database.models import MarketingLead
 
 log = logging.getLogger(__name__)
 
