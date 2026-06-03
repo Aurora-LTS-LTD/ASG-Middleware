@@ -2,7 +2,6 @@ alembic==1.18.4
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
--e git+https://github.com/Aurora-LTS-LTD/ASG-Middleware.git@7d09da167804a6062db8e74fb134e63349be623e#egg=aurora_shared&subdirectory=shared_packages/aurora_shared
 bcrypt==4.3.0
 bottle==0.13.4
 brotli==1.2.0
