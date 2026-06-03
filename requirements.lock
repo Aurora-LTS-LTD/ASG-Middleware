@@ -1,130 +1,79 @@
-# Aurora LTS — Production Dependency Lock
-# =============================================================
-# Pinned from the dev venv (Python 3.14.4) on 2026-04 with the
-# following modifications for Linux production:
-#   - Removed macOS-only transitives (pywebview, pyobjc-*, bottle,
-#     proxy_tools) — these are not used at runtime by the FastAPI app
-#   - Added `psycopg[binary]` for Cloud SQL Postgres
-#   - Added `gunicorn` as the production process manager fronting Uvicorn
-#
-# Regenerate with:
-#   /path/to/venv/bin/pip freeze | grep -v -E '^(pywebview|pyobjc|bottle|proxy_tools)' \
-#     | sort > requirements.lock
-#   # then re-add: psycopg[binary]==3.2.x  and  gunicorn==23.x
-
-# ── Core web framework ──
-fastapi==0.135.1
-starlette==0.52.1
-uvicorn==0.41.0
-gunicorn==23.0.0
+alembic==1.18.4
+annotated-doc==0.0.4
+annotated-types==0.7.0
 anyio==4.12.1
+-e git+https://github.com/Aurora-LTS-LTD/ASG-Middleware.git@7d09da167804a6062db8e74fb134e63349be623e#egg=aurora_shared&subdirectory=shared_packages/aurora_shared
+bcrypt==4.3.0
+bottle==0.13.4
+brotli==1.2.0
+certifi==2026.2.25
+cffi==2.0.0
+charset-normalizer==3.4.7
+click==8.3.1
+cryptography==46.0.7
+cssselect2==0.9.0
+Deprecated==1.3.1
+ecdsa==0.19.2
+fastapi==0.135.1
+fonttools==4.62.1
+google-api-core==2.30.3
+google-auth==2.53.0
+google-cloud-bigquery==3.41.0
+google-cloud-core==2.6.0
+google-cloud-storage==3.10.1
+google-crc32c==1.8.0
+google-resumable-media==2.9.0
+googleapis-common-protos==1.75.0
+grpcio==1.81.0
+grpcio-status==1.81.0
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
-python-multipart==0.0.26
-typing-inspection==0.4.2
-typing_extensions==4.15.0
-annotated-doc==0.0.4
-annotated-types==0.7.0
-click==8.3.1
 idna==3.11
-certifi==2026.2.25
-
-# ── Pydantic v2 ──
+Jinja2==3.1.6
+limits==3.14.1
+Mako==1.3.12
+MarkupSafe==3.0.3
+packaging==24.2
+passlib==1.7.4
+phonenumbers==9.0.31
+pillow==12.2.0
+proto-plus==1.28.0
+protobuf==7.35.0
+proxy_tools==0.1.0
+pyasn1==0.6.3
+pyasn1_modules==0.4.2
+pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
-
-# ── ORM + Database drivers ──
-SQLAlchemy==2.0.48
-# Postgres driver (production) — Cloud SQL via Unix socket /cloudsql/...
-psycopg[binary]==3.2.13
-
-# ── Auth & cryptography ──
+pydyf==0.12.1
+pyobjc-core==12.1
+pyobjc-framework-Cocoa==12.1
+pyobjc-framework-Quartz==12.1
+pyobjc-framework-Security==12.1
+pyobjc-framework-UniformTypeIdentifiers==12.1
+pyobjc-framework-WebKit==12.1
+pyphen==0.17.2
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.2
 python-jose==3.5.0
-passlib==1.7.4
-bcrypt==4.3.0
-cryptography==46.0.7
-cffi==2.0.0
-pycparser==3.0
-pyasn1==0.6.3
-ecdsa==0.19.2
+python-multipart==0.0.26
+python-telegram-bot==22.7
+pywebview==6.1
+qrcode==8.2
+requests==2.34.2
 rsa==4.9.1
 six==1.17.0
-
-# ── Google OIDC verification (Track 4 Phase A — aurora-admin-ui → aurora-api) ──
-# Used by app/services/auth_oidc.py to verify RS256 Google identity
-# tokens from the metadata server. Without these, the OIDC code path
-# raises ModuleNotFoundError on the lazy `from google.oauth2 import id_token`
-# and all admin-UI server-to-server calls fail with 401.
-google-auth==2.36.0
-cachetools==5.5.0
-pyasn1-modules==0.4.1
-# google-auth's `transport.requests` uses python-requests for JWKS fetch
-requests==2.32.3
-urllib3==2.2.3
-charset-normalizer==3.4.0
-
-# ── Anthropic Claude API (Sprint 3 — AI Copilot Console) ──
-# Used by app/services/copilot/anthropic_client.py for streaming
-# tool-using chat with the founder. ANTHROPIC_API_KEY is mounted
-# from Secret Manager via Cloud Run --set-secrets.
-#
-# Version pinning notes:
-#   • anthropic 0.42.x is the first line with stable tool-use streaming
-#     types in async mode.
-#   • jiter 0.10.0+ is required for Python 3.14 / PyO3 0.23 compatibility;
-#     earlier versions (≤ 0.8.x) reference removed PyO3 FFI symbols
-#     (PyUnicode_KIND etc.) and fail to compile.
-anthropic==0.42.0
-distro==1.9.0
-jiter==0.10.0
-
-# ── WebAuthn step-up (Sprint 3 — T2.5 carry-over) ──
-# Gates state-mutating Copilot tool calls (Approve & Build) and
-# the existing DSAR/payout/break-glass sensitive admin actions
-# behind Touch ID / Face ID via Apple Keychain / Secure Enclave.
-webauthn==2.4.0
-asn1crypto==1.5.1
-cbor2==5.6.5
-
-# ── Templates + invoices PDF ──
-Jinja2==3.1.6
-MarkupSafe==3.0.3
-weasyprint==68.1
-pydyf==0.12.1
-pyphen==0.17.2
-cssselect2==0.9.0
+slowapi==0.1.9
+SQLAlchemy==2.0.48
+starlette==0.52.1
 tinycss2==1.5.1
 tinyhtml5==2.1.0
-fonttools==4.62.1
-pillow==12.2.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+urllib3==2.7.0
+uvicorn==0.41.0
+weasyprint==68.1
 webencodings==0.5.1
-brotli==1.2.0
-zopfli==0.4.1
-qrcode==8.2
-
-# ── Telegram + WhatsApp ──
-python-telegram-bot==22.7
-
-# ── Misc utilities ──
-python-dotenv==1.2.2
-
-# ── Rate limiting (P0-09 — slowapi + transitive deps) ──
-# main.py imports slowapi at module load; it was in requirements.txt but
-# never made it into the lock, so fresh image builds crashed every worker
-# on `ModuleNotFoundError: No module named 'slowapi'`. Pinned to the
-# versions in the working dev venv (Python 3.14.4).
-slowapi==0.1.9
-limits==3.14.1
-Deprecated==1.3.1
 wrapt==2.2.1
-packaging==24.2          # required by limits (and many others)
-
-# ── Other runtime deps that drifted out of the lock ──
-# These are imported at module load (so every worker crashed under traffic
-# with ModuleNotFoundError) but were present in the working dev venv. Pinned
-# to the dev-venv versions. Found by diffing `pip freeze` against this lock.
-python-dateutil==2.9.0.post0   # imported by routers at module load
-phonenumbers==9.0.31           # E.164 phone validation (WhatsApp / leads)
-alembic==1.18.4                # migration tooling imported at startup
-Mako==1.3.12                   # alembic template dependency
+zopfli==0.4.1
