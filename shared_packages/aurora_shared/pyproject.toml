@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aurora-shared"
+version = "0.1.0"
+description = "Aurora LTS shared backend core (DB connection + models, auth middleware, identity, webauthn) — imported by aurora-main-api (M1) and aurora-api-core (M2)."
+requires-python = ">=3.12"
+# Runtime deps (sqlalchemy, fastapi, pydantic, psycopg, …) are provided by each
+# consuming service's requirements; not pinned here to avoid double-sourcing.
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aurora_shared*"]

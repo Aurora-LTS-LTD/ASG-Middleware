@@ -79,6 +79,13 @@ node_modules/
 dist/
 build/
 
+# ── Front-end layer (own deploy pipelines; never needed by backend images) ──
+# accountant-portal = Tauri Mac shell (own repo, ~1.8 GB Rust target/).
+# front-end/ceo-dashboard/ is intentionally NOT excluded — M1 bundles it (Phase 4).
+front-end/accountant-portal/
+**/target/
+**/.next/
+
 # ── Misc ──
 .dockerignore
 Dockerfile.*

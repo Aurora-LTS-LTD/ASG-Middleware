@@ -1,17 +1,16 @@
 # Build + IMPORT-GATE + push. No deploy, no migrations.
 # The import step reproduces the gunicorn worker boot (import app.main, which
 # pulls in every router) inside the built image. If any dependency is missing
-# from requirements.lock, this step fails and the image is NEVER pushed —
-# preventing a broken image from reaching the Cloud Run service.
+# from requirements.lock, this step fails and the image is NEVER pushed.
 substitutions:
-  _IMG: me-west1-docker.pkg.dev/aurora-lts-prod/aurora/api:v1.15.2
+  _IMG: me-west1-docker.pkg.dev/aurora-lts-prod/aurora/api:v1.14.3
 options:
   machineType: E2_HIGHCPU_8
   logging: CLOUD_LOGGING_ONLY
 steps:
   - id: build
     name: gcr.io/cloud-builders/docker
-    args: ["build", "--tag=${_IMG}", "."]
+    args: ["build", "--file=services/aurora-main-api/Dockerfile", "--tag=${_IMG}", "."]
   - id: import-gate
     name: gcr.io/cloud-builders/docker
     waitFor: [build]

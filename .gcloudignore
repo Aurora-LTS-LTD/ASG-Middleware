@@ -24,7 +24,9 @@ node_modules/
 # The accountant-portal is a SEPARATE app (Tauri+Next, own git repo). The
 # aurora-api Dockerfile only copies server_files/ — the portal's 1.8 GB Rust
 # target/ + Next build output have no business in the API build context.
-accountant-portal/
+# (Relocated under front-end/ during the monorepo split — Phase 2A.)
+# NOTE: front-end/ceo-dashboard/ is intentionally NOT excluded — M1 bundles it (Phase 4).
+front-end/accountant-portal/
 
 # Build outputs (Rust / Next / generic) — never needed by the API image.
 **/target/
