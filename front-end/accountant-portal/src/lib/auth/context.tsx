@@ -58,6 +58,18 @@ export interface AuthApi {
    */
   verifyOtp: (args: { email: string; otp: string; device_label?: string }) => Promise<OtpVerifyResponse>;
 
+  /**
+   * Email + password sign-in. Enrolls the device + persists tokens, transitions
+   * to signed_in. Throws ApiClientError (error: "invalid_credentials") on failure.
+   */
+  loginWithPassword: (args: { email: string; password: string; device_label?: string }) => Promise<OtpVerifyResponse>;
+
+  /** Request a password-reset code by email (anti-enumeration; always resolves). */
+  requestPasswordReset: (email: string) => Promise<{ sent_to: string; expires_in_seconds: number }>;
+
+  /** Complete a password reset with the emailed code + a new password. */
+  resetPassword: (args: { email: string; code: string; new_password: string }) => Promise<void>;
+
   signOut: () => Promise<void>;
 }
 
@@ -208,6 +220,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const loginWithPassword = useCallback(
+    async ({ email, password, device_label }: { email: string; password: string; device_label?: string }) => {
+      const [fingerprint, platform] = await Promise.all([
+        getDeviceFingerprint(),
+        getPlatform(),
+      ]);
+      const safePlatform = platform === "unknown" ? "macos" : platform;
+      const label = device_label || `${platform[0].toUpperCase() + platform.slice(1)} device`;
+
+      const result = await api.login({
+        email,
+        password,
+        device_fingerprint: fingerprint,
+        platform: safePlatform,
+        device_label: label,
+      });
+
+      setState({
+        status: "signed_in",
+        user: result.user,
+        deviceId: result.device_id,
+        isNewDevice: result.is_new_device,
+      });
+
+      return result;
+    },
+    [],
+  );
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    const res = await api.forgotPassword(email);
+    return { sent_to: res.sent_to, expires_in_seconds: res.expires_in_seconds };
+  }, []);
+
+  const resetPassword = useCallback(
+    async ({ email, code, new_password }: { email: string; code: string; new_password: string }) => {
+      await api.resetPassword({ email, code, new_password });
+    },
+    [],
+  );
+
   const signOut = useCallback(async () => {
     try {
       await api.logout();
@@ -251,9 +304,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...state,
       requestOtp,
       verifyOtp,
+      loginWithPassword,
+      requestPasswordReset,
+      resetPassword,
       signOut,
     }),
-    [state, requestOtp, verifyOtp, signOut],
+    [state, requestOtp, verifyOtp, loginWithPassword, requestPasswordReset, resetPassword, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
