@@ -84,10 +84,27 @@ def _build_engine():
     if DIALECT == "sqlite":
         # SQLite needs `check_same_thread=False` because FastAPI uses
         # multiple threads. Pooling is unnecessary (single-file DB).
-        return create_engine(
+        # `timeout` arms the busy handler so concurrent writers (request
+        # handlers + background workers) WAIT up to 30s instead of erroring
+        # with "database is locked" — only relevant to local SQLite dev;
+        # production runs on Postgres.
+        sqlite_engine = create_engine(
             SQLALCHEMY_DATABASE_URL,
-            connect_args={"check_same_thread": False},
+            connect_args={"check_same_thread": False, "timeout": 30},
         )
+
+        # Eagerly enable WAL on every connection so readers (background-worker
+        # SELECTs) never block the request handlers' writes. (The lazy
+        # _ensure_wal_mode() hook only fires via create_tables(); this guarantees
+        # it regardless.) WAL + busy_timeout = no "database is locked" locally.
+        @event.listens_for(sqlite_engine, "connect")
+        def _sqlite_pragmas(dbapi_conn, _rec):  # pragma: no cover (dev-only)
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=30000")
+            cur.close()
+
+        return sqlite_engine
 
     # Postgres (Cloud SQL) — production.
     # P1-03: defaults lowered from (10, 20) to (5, 5). Previous defaults
