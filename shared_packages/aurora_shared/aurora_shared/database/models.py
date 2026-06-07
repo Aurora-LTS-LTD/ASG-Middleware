@@ -192,6 +192,10 @@ class Invoice(Base):
     # ── Timestamps ──
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     finalized_at = Column(DateTime, nullable=True)   # When it was finalized
+    # ── Lifecycle timestamps (phase29) — stamped by invoice_lifecycle.transition() ──
+    submitted_at = Column(DateTime, nullable=True)   # allocation request first submitted to ITA
+    sent_at = Column(DateTime, nullable=True)        # delivered to the customer
+    cancelled_at = Column(DateTime, nullable=True)   # voided (draft / pending_allocation only)
 
     # ── Relationships ──
     business = relationship("Business", back_populates="invoices")
