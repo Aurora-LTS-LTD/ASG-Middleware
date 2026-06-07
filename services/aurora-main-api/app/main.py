@@ -158,20 +158,28 @@ register_exception_handlers(app)
 # modern browsers when credentials are present — see CVE-style
 # guidance in OWASP CORS Cheat Sheet. The explicit allowlist below
 # is the correct production posture.
+_cors_origins = [
+    "https://aurora-ltd.co.il",            # marketing apex
+    "https://www.aurora-ltd.co.il",        # marketing www subdomain
+    "https://app.aurora-ltd.co.il",        # forward-compat: future authenticated SPA
+    "https://console.api-aurora-lts.com",  # Executive Cockpit (Appendix M — primary)
+    "https://admin.aurora-ltd.co.il",      # legacy admin URL — REMOVE in Appendix M P10 cutover
+    # Sprint 8.2.1 — Accountant Portal (Tauri desktop app)
+    "https://api-aurora-lts.com",          # API-origin browser fetch from portal web layer
+    "https://portal.api-aurora-lts.com",   # portal download/landing page
+    "tauri://localhost",                    # Tauri renderer on macOS + Linux
+    "https://tauri.localhost",              # Tauri renderer on Windows
+]
+# Local development only: the Next dev server (3000) + Tauri dev origin (1420).
+# Never added under cloud_run — production stays on the explicit allowlist above.
+if os.getenv("AURORA_RUNTIME", "").lower() != "cloud_run":
+    _cors_origins += [
+        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:1420", "http://127.0.0.1:1420",
+    ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://aurora-ltd.co.il",            # marketing apex
-        "https://www.aurora-ltd.co.il",        # marketing www subdomain
-        "https://app.aurora-ltd.co.il",        # forward-compat: future authenticated SPA
-        "https://console.api-aurora-lts.com",  # Executive Cockpit (Appendix M — primary)
-        "https://admin.aurora-ltd.co.il",      # legacy admin URL — REMOVE in Appendix M P10 cutover
-        # Sprint 8.2.1 — Accountant Portal (Tauri desktop app)
-        "https://api-aurora-lts.com",          # API-origin browser fetch from portal web layer
-        "https://portal.api-aurora-lts.com",   # portal download/landing page
-        "tauri://localhost",                    # Tauri renderer on macOS + Linux
-        "https://tauri.localhost",              # Tauri renderer on Windows
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
