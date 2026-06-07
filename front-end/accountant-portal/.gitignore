@@ -1,0 +1,45 @@
+# ─────────────────────────────────────────────────────────────
+# Aurora LTS Accountant Portal — Tauri + Next.js gitignore
+# ─────────────────────────────────────────────────────────────
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Next.js build artifacts
+.next/
+out/
+
+# Tauri build artifacts (Rust)
+src-tauri/target/
+src-tauri/gen/
+
+# Production
+build/
+dist/
+
+# Environment + secrets — NEVER commit
+.env
+.env*.local
+.env.production
+*.pem
+*.key
+
+# Local dev
+*.log
+*.log.*
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Testing
+coverage/
+
+# TypeScript build info
+*.tsbuildinfo
+next-env.d.ts

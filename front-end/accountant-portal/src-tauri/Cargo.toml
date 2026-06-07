@@ -1,0 +1,46 @@
+[package]
+name = "app"
+version = "0.1.0"
+description = "Aurora LTS Accountant Portal — Tauri shell"
+authors = ["Aurora LTS LTD"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.2", features = [] }
+tauri-plugin-log = "2"
+
+# ── Sprint 8.2 — Aurora Accountant Portal additions ──
+# OS-native credential storage (macOS Keychain / Windows Credential
+# Manager / Linux Secret Service). All token storage goes through here;
+# nothing sensitive ever lands in localStorage.
+keyring = { version = "3", default-features = false, features = [
+    "apple-native",
+    "windows-native",
+    "sync-secret-service",
+] }
+
+# SHA-256 for the device fingerprint hash + token-hash debugging.
+sha2 = "0.10"
+hex = "0.4"
+
+# Machine UID — produces a stable cross-platform machine identifier
+# we feed into SHA-256 to get the device_fingerprint. Reads:
+#   • macOS: IOPlatformUUID (stable across reboots, changes on wipe)
+#   • Windows: HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid
+#   • Linux: /etc/machine-id
+machine-uid = "0.5"
