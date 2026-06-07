@@ -49,6 +49,7 @@ import threading
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 log = logging.getLogger(__name__)
@@ -91,6 +92,12 @@ def _build_engine():
         sqlite_engine = create_engine(
             SQLALCHEMY_DATABASE_URL,
             connect_args={"check_same_thread": False, "timeout": 30},
+            # One shared connection across threads (SQLite serializes access),
+            # so request handlers never deadlock against a second pooled
+            # connection holding the WAL write lock. Standard SQLite-app config;
+            # production runs on Postgres with a real QueuePool (this branch is
+            # never taken there).
+            poolclass=StaticPool,
         )
 
         # Eagerly enable WAL on every connection so readers (background-worker
