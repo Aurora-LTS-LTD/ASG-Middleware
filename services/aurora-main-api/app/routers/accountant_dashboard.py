@@ -33,7 +33,7 @@ import datetime
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -60,7 +60,7 @@ class KpisResponse(BaseModel):
 @router.get("/kpis", response_model=KpisResponse)
 @limiter.limit("60/minute")
 def get_kpis(
-    request,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_accountant),
 ) -> KpisResponse:
