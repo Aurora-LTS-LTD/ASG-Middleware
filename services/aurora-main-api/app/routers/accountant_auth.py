@@ -268,6 +268,11 @@ class ChangePasswordRequest(BaseModel):
         return _validate_password_strength(v)
 
 
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    firm_name: Optional[str] = Field(default=None, max_length=200)
+
+
 class LogoutRequest(BaseModel):
     refresh_token: Optional[str] = Field(default=None, max_length=200)
 
@@ -365,7 +370,7 @@ def _issue_access_token(user_id: int, email: str, device_id: int) -> tuple[str, 
     expires = now + datetime.timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS)
     payload = {
         "iss": JWT_ISSUER,
-        "sub": user_id,
+        "sub": str(user_id),  # JWT spec: sub MUST be a string (python-jose 3.5+ enforces it)
         "email": email,
         "device_id": device_id,
         "role": "accountant",
@@ -1341,6 +1346,60 @@ def change_password(
     db.commit()
     log.info("[change-password] user_id=%s device_id=%s", user.id, current_device_id)
     return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────
+# Endpoints — Profile
+# ─────────────────────────────────────────────────────────────
+
+@router.get("/profile", response_model=AccountantUserPayload)
+def get_profile(
+    db: Session = Depends(get_db),
+    auth: tuple = Depends(require_accountant),
+):
+    """Return the signed-in accountant's editable profile."""
+    user, _current = auth
+    return _user_payload(user, db)
+
+
+@router.patch("/profile", response_model=AccountantUserPayload)
+def update_profile(
+    body: ProfileUpdateRequest,
+    db: Session = Depends(get_db),
+    auth: tuple = Depends(require_accountant),
+):
+    """Update the accountant's display name and/or firm name."""
+    user, _current = auth
+    now = _now()
+    changed: list[str] = []
+
+    if body.name is not None:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(400, detail={"error": "invalid_name", "message": "Name cannot be empty."})
+        parts = name.split(None, 1)
+        user.first_name = parts[0]
+        user.last_name = parts[1] if len(parts) > 1 else ""
+        user.full_name = name
+        changed.append("name")
+
+    if body.firm_name is not None:
+        user.firm_name = body.firm_name.strip() or None
+        changed.append("firm_name")
+
+    if changed:
+        db.add(
+            ActionLog(
+                status="accountant_profile_updated",
+                detail=f"user_id={user.id} fields={','.join(changed)}",
+                triggered_at=now,
+            )
+        )
+        db.commit()
+        db.refresh(user)
+        log.info("[profile] user_id=%s updated %s", user.id, changed)
+
+    return _user_payload(user, db)
 
 
 # ─────────────────────────────────────────────────────────────

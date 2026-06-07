@@ -43,9 +43,9 @@ export function M2Panel() {
   return (
     <PanelShell engine={ENGINES.m2} accent="text-fuchsia-300">
       <PanelSection title="Core posture" hint="live via apiM2">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+        <div className="rounded-lg border border-border bg-card p-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1.5 text-sm text-zinc-200">
+            <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
               <ShieldCheck className={`h-4 w-4 ${postureLive ? "text-emerald-400" : "text-amber-400"}`} />
               AI Core service
             </span>
@@ -61,7 +61,7 @@ export function M2Panel() {
               {isError ? "unreachable" : (data?.status ?? "…")}
             </span>
           </div>
-          <p className="mt-1.5 text-[11px] text-zinc-500">
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
             Compliance backends:{" "}
             <span className={postureLive ? "text-emerald-400" : "text-amber-400"}>{posture}</span>
             {" — "}probed through the engine-bound M2 client.
@@ -70,8 +70,8 @@ export function M2Panel() {
       </PanelSection>
 
       <PanelSection title="Gemini Copilot" hint="engine: m2">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="flex items-center gap-2 text-sm text-zinc-200">
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center gap-2 text-sm text-foreground">
             <Sparkles className="h-4 w-4 text-fuchsia-400" />
             Active Copilot session
           </div>
@@ -84,7 +84,7 @@ export function M2Panel() {
           <textarea
             disabled
             placeholder="Ask the Copilot… (disabled until exec auth is wired)"
-            className="mt-3 h-20 w-full resize-none rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 placeholder:text-zinc-600 disabled:opacity-60"
+            className="mt-3 h-20 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground disabled:opacity-60"
           />
         </div>
       </PanelSection>

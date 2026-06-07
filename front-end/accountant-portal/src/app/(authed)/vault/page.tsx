@@ -48,16 +48,16 @@ function FilterSelect<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+      <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as T | "")}
-        className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
       >
         {options.map((opt) => (
-          <option key={opt.value} value={opt.value} className="bg-zinc-900">
+          <option key={opt.value} value={opt.value} className="bg-card">
             {opt.label}
           </option>
         ))}
@@ -147,25 +147,25 @@ export default function VaultPage() {
       <Topbar title="Document Vault" />
       <main className="flex flex-1 flex-col overflow-hidden">
         {/* ── Top bar: client selector ─────────────────────── */}
-        <div className="border-b border-zinc-800 bg-zinc-950/80 px-6 py-3">
+        <div className="border-b border-border bg-background/80 px-6 py-3">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Client
               </label>
               <select
                 value={clientId}
                 onChange={(e) => handleClientChange(Number(e.target.value))}
-                className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {MOCK_CLIENTS.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-zinc-900">
+                  <option key={c.id} value={c.id} className="bg-card">
                     {c.name}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="h-10 w-px bg-zinc-800 self-end" />
+            <div className="h-10 w-px bg-muted self-end" />
 
             {/* Filters */}
             <FilterSelect<string>
@@ -195,14 +195,14 @@ export default function VaultPage() {
             {hasActiveFilters && (
               <button
                 onClick={resetFilters}
-                className="self-end rounded-lg border border-zinc-700 bg-transparent px-3 py-1.5 text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
+                className="self-end rounded-lg border border-border bg-transparent px-3 py-1.5 text-xs text-muted-foreground hover:border-border hover:text-foreground transition-colors"
               >
                 Clear filters
               </button>
             )}
 
             <div className="ml-auto self-end flex items-center gap-3">
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-muted-foreground">
                 {activeClient.industry}
               </span>
 
@@ -256,7 +256,7 @@ export default function VaultPage() {
           </div>
 
           {/* Ingestion address sidebar */}
-          <div className="w-72 shrink-0 overflow-y-auto border-l border-zinc-800 p-4">
+          <div className="w-72 shrink-0 overflow-y-auto border-l border-border p-4">
             <IngestionAddressCard clientId={clientId} />
           </div>
         </div>

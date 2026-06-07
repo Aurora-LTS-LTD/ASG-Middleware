@@ -27,6 +27,7 @@ import {
 import { KEYCHAIN_KEYS } from "@/types/api";
 import type {
   ApiError,
+  AccountantUser,
   OtpSendRequest,
   OtpSendResponse,
   OtpVerifyRequest,
@@ -437,6 +438,20 @@ export const api = {
   /** Accountant revenue-share earnings, incl. last-12-months trend. */
   async getEarnings(): Promise<Earnings> {
     return call<Earnings>("/api/v1/accountant/earnings", { authRequired: true });
+  },
+
+  /** The signed-in accountant's editable profile. */
+  async getProfile(): Promise<AccountantUser> {
+    return call<AccountantUser>("/api/v1/accountant/profile", { authRequired: true });
+  },
+
+  /** Update display name and/or firm name; returns the refreshed profile. */
+  async updateProfile(req: { name?: string; firm_name?: string }): Promise<AccountantUser> {
+    return call<AccountantUser>("/api/v1/accountant/profile", {
+      method: "PATCH",
+      body: req,
+      authRequired: true,
+    });
   },
 
   /** Manual refresh — usually unneeded, the client refreshes proactively. */

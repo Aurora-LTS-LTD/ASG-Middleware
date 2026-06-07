@@ -6,6 +6,7 @@ import { QueryProvider } from "@/lib/QueryProvider";
 import { Toaster } from "@/components/ui/toaster";
 import { ErrorBoundary } from "@/components/shell/ErrorBoundary";
 import { LocaleProvider } from "@/lib/i18n/LocaleProvider"; // P2-14
+import { ThemeProvider } from "@/lib/theme/ThemeProvider"; // P3 — light/dark
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,24 +32,27 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      // Default to dark — banking terminal aesthetic + matches the existing UI.
-      data-theme="dark"
+      // next-themes sets class="dark"|"light" on <html> (default dark). Suppress
+      // the expected hydration diff from its pre-paint inline script.
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         {/* P1-18 — root error boundary wraps the entire app so a
             single uncaught render error doesn't crash the shell. */}
-        <ErrorBoundary>
-          {/* P2-14 — locale provider must wrap everything so all
-              nested components can call useTranslations() */}
-          <LocaleProvider>
-            <QueryProvider>
-              <AuthProvider>
-                {children}
-                <Toaster />
-              </AuthProvider>
-            </QueryProvider>
-          </LocaleProvider>
-        </ErrorBoundary>
+        <ThemeProvider>
+          <ErrorBoundary>
+            {/* P2-14 — locale provider must wrap everything so all
+                nested components can call useTranslations() */}
+            <LocaleProvider>
+              <QueryProvider>
+                <AuthProvider>
+                  {children}
+                  <Toaster />
+                </AuthProvider>
+              </QueryProvider>
+            </LocaleProvider>
+          </ErrorBoundary>
+        </ThemeProvider>
       </body>
     </html>
   );

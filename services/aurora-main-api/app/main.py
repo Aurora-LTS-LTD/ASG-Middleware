@@ -158,20 +158,28 @@ register_exception_handlers(app)
 # modern browsers when credentials are present — see CVE-style
 # guidance in OWASP CORS Cheat Sheet. The explicit allowlist below
 # is the correct production posture.
+_cors_origins = [
+    "https://aurora-ltd.co.il",            # marketing apex
+    "https://www.aurora-ltd.co.il",        # marketing www subdomain
+    "https://app.aurora-ltd.co.il",        # forward-compat: future authenticated SPA
+    "https://console.api-aurora-lts.com",  # Executive Cockpit (Appendix M — primary)
+    "https://admin.aurora-ltd.co.il",      # legacy admin URL — REMOVE in Appendix M P10 cutover
+    # Sprint 8.2.1 — Accountant Portal (Tauri desktop app)
+    "https://api-aurora-lts.com",          # API-origin browser fetch from portal web layer
+    "https://portal.api-aurora-lts.com",   # portal download/landing page
+    "tauri://localhost",                    # Tauri renderer on macOS + Linux
+    "https://tauri.localhost",              # Tauri renderer on Windows
+]
+# Local development only: the Next dev server (3000) + Tauri dev origin (1420).
+# Never added under cloud_run — production stays on the explicit allowlist above.
+if os.getenv("AURORA_RUNTIME", "").lower() != "cloud_run":
+    _cors_origins += [
+        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:1420", "http://127.0.0.1:1420",
+    ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://aurora-ltd.co.il",            # marketing apex
-        "https://www.aurora-ltd.co.il",        # marketing www subdomain
-        "https://app.aurora-ltd.co.il",        # forward-compat: future authenticated SPA
-        "https://console.api-aurora-lts.com",  # Executive Cockpit (Appendix M — primary)
-        "https://admin.aurora-ltd.co.il",      # legacy admin URL — REMOVE in Appendix M P10 cutover
-        # Sprint 8.2.1 — Accountant Portal (Tauri desktop app)
-        "https://api-aurora-lts.com",          # API-origin browser fetch from portal web layer
-        "https://portal.api-aurora-lts.com",   # portal download/landing page
-        "tauri://localhost",                    # Tauri renderer on macOS + Linux
-        "https://tauri.localhost",              # Tauri renderer on Windows
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
@@ -284,15 +292,24 @@ async def startup():
             "to run inline)."
         )
 
-    # ── Start WhatsApp outbound-resend worker (always on) ──
+    # Operational kill-switch for the background workers (resend / allocation /
+    # digest). Default off (workers run); set AURORA_DISABLE_WORKERS=1 to skip
+    # them — useful for local SQLite dev (a worker's open write txn otherwise
+    # contends with request handlers) and for read-only / maintenance instances.
+    _disable_workers = os.getenv("AURORA_DISABLE_WORKERS", "").strip().lower() in ("1", "true")
+
+    # ── Start WhatsApp outbound-resend worker (always on unless disabled) ──
     # Safe to run even if Meta creds aren't set — the worker no-ops
     # until is_configured() is true, then starts draining the queue.
-    try:
-        from app.services.whatsapp_resend import whatsapp_resend_loop
-        asyncio.create_task(whatsapp_resend_loop())
-        print("[STARTUP] ✅ WhatsApp resend worker started")
-    except Exception as e:
-        print(f"[STARTUP] ⚠️ WhatsApp resend worker failed to start: {e}")
+    if _disable_workers:
+        print("[STARTUP] Background workers disabled (AURORA_DISABLE_WORKERS)")
+    else:
+        try:
+            from app.services.whatsapp_resend import whatsapp_resend_loop
+            asyncio.create_task(whatsapp_resend_loop())
+            print("[STARTUP] ✅ WhatsApp resend worker started")
+        except Exception as e:
+            print(f"[STARTUP] ⚠️ WhatsApp resend worker failed to start: {e}")
 
     # ── Seed default admin user (dev only — never runs on Cloud Run) ──
     # Credentials are read from environment variables so they are NEVER
@@ -360,7 +377,7 @@ async def startup():
     # The bot runs as part of this FastAPI process — no separate process needed.
     # Updates arrive via the POST /webhook/telegram/{secret} endpoint.
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    if telegram_token:
+    if telegram_token and not _disable_workers:
         try:
             from app.services.telegram_bot import (
                 init_application,
@@ -603,6 +620,13 @@ def _run_all_phase_migrations() -> None:
         run_phase27()
     except Exception as e:
         print(f"[STARTUP] Phase 27 password-reset migration warning: {e}")
+
+    # ── Accountant Portal: editable firm_name on users ──
+    try:
+        from app.migrations.migrate_phase28_user_firm_name import run as run_phase28
+        run_phase28()
+    except Exception as e:
+        print(f"[STARTUP] Phase 28 firm_name migration warning: {e}")
 
     # ── P2-23: Payment links table ──
     try:

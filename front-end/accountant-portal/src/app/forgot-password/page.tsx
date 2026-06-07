@@ -58,7 +58,7 @@ const resetSchema = z
   });
 
 const inputClass =
-  "bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-indigo-500";
+  "bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-indigo-500";
 
 export default function ForgotPasswordPage() {
   const { requestPasswordReset, resetPassword } = useAuth();
@@ -121,8 +121,8 @@ export default function ForgotPasswordPage() {
         : "Your password has been reset";
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6 sm:p-12 bg-zinc-950">
-      <Card className="w-[420px] bg-zinc-900 border-zinc-800 text-zinc-100 shadow-2xl shadow-black/50">
+    <main className="flex min-h-screen flex-col items-center justify-center p-6 sm:p-12 bg-background">
+      <Card className="w-[420px] bg-card border-border text-foreground shadow-2xl shadow-black/50">
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-center mb-6">
             <div className="h-12 w-12 bg-indigo-500 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -132,7 +132,7 @@ export default function ForgotPasswordPage() {
           <CardTitle className="text-2xl text-center font-semibold tracking-tight">
             Reset password
           </CardTitle>
-          <CardDescription className="text-center text-zinc-400">
+          <CardDescription className="text-center text-muted-foreground">
             {description}
           </CardDescription>
         </CardHeader>
@@ -154,7 +154,7 @@ export default function ForgotPasswordPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-300">Work Email</FormLabel>
+                      <FormLabel className="text-foreground">Work Email</FormLabel>
                       <FormControl>
                         <Input placeholder="accountant@agency.com" autoComplete="email" {...field} className={inputClass} />
                       </FormControl>
@@ -177,13 +177,13 @@ export default function ForgotPasswordPage() {
                   name="code"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-300">Reset code</FormLabel>
+                      <FormLabel className="text-foreground">Reset code</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="ABCD2345"
                           autoComplete="one-time-code"
                           {...field}
-                          className="bg-zinc-950 border-zinc-800 text-zinc-100 text-center tracking-widest font-mono uppercase focus-visible:ring-indigo-500"
+                          className="bg-background border-border text-foreground text-center tracking-widest font-mono uppercase focus-visible:ring-indigo-500"
                         />
                       </FormControl>
                       <FormMessage className="text-red-400" />
@@ -195,7 +195,7 @@ export default function ForgotPasswordPage() {
                   name="new_password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-300">New password</FormLabel>
+                      <FormLabel className="text-foreground">New password</FormLabel>
                       <FormControl>
                         <Input type="password" placeholder="••••••••" autoComplete="new-password" {...field} className={inputClass} />
                       </FormControl>
@@ -208,7 +208,7 @@ export default function ForgotPasswordPage() {
                   name="confirm"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-300">Confirm password</FormLabel>
+                      <FormLabel className="text-foreground">Confirm password</FormLabel>
                       <FormControl>
                         <Input type="password" placeholder="••••••••" autoComplete="new-password" {...field} className={inputClass} />
                       </FormControl>
@@ -223,7 +223,7 @@ export default function ForgotPasswordPage() {
                   <button
                     type="button"
                     onClick={() => { setStep("request"); setError(null); resetForm.reset(); }}
-                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Didn&apos;t get a code? Try again
                   </button>
@@ -234,7 +234,7 @@ export default function ForgotPasswordPage() {
 
           {step === "done" && (
             <div className="space-y-4 text-center">
-              <p className="text-sm text-zinc-300 leading-relaxed">
+              <p className="text-sm text-foreground leading-relaxed">
                 Your password has been reset and all existing sessions were signed out.
                 You can now sign in with your new password.
               </p>
@@ -249,7 +249,7 @@ export default function ForgotPasswordPage() {
 
           {step !== "done" && (
             <div className="mt-6 text-center">
-              <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors">
+              <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Back to sign in
               </Link>
             </div>

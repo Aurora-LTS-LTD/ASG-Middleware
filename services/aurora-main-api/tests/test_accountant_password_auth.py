@@ -12,6 +12,14 @@ USAGE: python tests/test_accountant_password_auth.py
 """
 import os
 import sys
+import time
+
+# Access tokens use datetime.utcnow().timestamp(), which interprets the naive
+# UTC time as LOCAL time — on a non-UTC dev machine that makes a freshly-minted
+# token look already-expired (require_accountant → "Signature has expired").
+# Pin the process to UTC (as Cloud Run runs) so the exp check matches prod.
+os.environ["TZ"] = "UTC"
+time.tzset()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -172,11 +180,25 @@ def main():
     r = login(client, EMAIL, PW2)
     check(r.status_code == 200 and r.json().get("access_token"),
           f"new password works → 200 (got {r.status_code})")
+    token = r.json().get("access_token", "")
 
     # 8. reset code is single-use → reuse fails
     r = client.post("/api/v1/accountant/reset-password", json={
         "email": EMAIL, "code": code, "new_password": "Another#Pw789"})
     check(r.status_code == 400, f"reused reset code → 400 single-use (got {r.status_code})")
+
+    # 9-11. Profile GET/PATCH (authed) — editable name + firm
+    hdr = {"Authorization": f"Bearer {token}"}
+    r = client.get("/api/v1/accountant/profile", headers=hdr)
+    check(r.status_code == 200 and r.json().get("name") == "Demo Accountant" and not r.json().get("firm_name"),
+          f"GET profile → 200 name + empty firm (got {r.status_code})")
+    r = client.patch("/api/v1/accountant/profile", headers=hdr,
+                     json={"name": "Renamed Accountant", "firm_name": "Masarwa & Co"})
+    check(r.status_code == 200 and r.json().get("name") == "Renamed Accountant" and r.json().get("firm_name") == "Masarwa & Co",
+          f"PATCH profile → 200 reflects changes (got {r.status_code}: {r.text[:120]})")
+    r = client.get("/api/v1/accountant/profile", headers=hdr)
+    check(r.status_code == 200 and r.json().get("name") == "Renamed Accountant" and r.json().get("firm_name") == "Masarwa & Co",
+          "GET profile after PATCH → persisted")
 
     print()
     print(f"\033[96m{PASS} passed, {FAIL} failed\033[0m")

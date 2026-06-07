@@ -7,7 +7,7 @@ const DOT: Record<HealthState, { dot: string; glow: string; ping: boolean }> = {
   online: { dot: "bg-emerald-400", glow: "shadow-[0_0_8px_2px_rgba(52,211,153,0.55)]", ping: true },
   degraded: { dot: "bg-amber-400", glow: "shadow-[0_0_8px_2px_rgba(251,191,36,0.55)]", ping: true },
   offline: { dot: "bg-red-500", glow: "shadow-[0_0_8px_2px_rgba(239,68,68,0.55)]", ping: false },
-  checking: { dot: "bg-zinc-500", glow: "", ping: false },
+  checking: { dot: "bg-muted-foreground", glow: "", ping: false },
 };
 
 export function HealthDot({
@@ -32,7 +32,7 @@ export function HealthDot({
         <span className={cn("relative inline-flex h-2.5 w-2.5 rounded-full", s.dot, s.glow)} />
       </span>
       {showDetail && (
-        <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           {health.detail}
         </span>
       )}

@@ -69,20 +69,20 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (this.props.fallback !== undefined) return this.props.fallback
 
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 text-zinc-100 p-6">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground p-6">
         <div className="max-w-md w-full rounded-2xl border border-red-500/30 bg-red-900/10 p-8 text-center">
           <div className="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20">
             <AlertOctagon className="h-7 w-7 text-red-300" />
           </div>
-          <h1 className="text-xl font-semibold text-zinc-100">
+          <h1 className="text-xl font-semibold text-foreground">
             Something went wrong
           </h1>
-          <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
             The portal encountered an unexpected error and stopped rendering
             this view. Your session is still active. Try reloading — if it
             keeps happening, file a ticket and quote the error class below.
           </p>
-          <code className="mt-4 inline-block rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-amber-300">
+          <code className="mt-4 inline-block rounded-md border border-border bg-card px-3 py-1 text-xs text-amber-300">
             {this.state.errorName}
           </code>
           <button

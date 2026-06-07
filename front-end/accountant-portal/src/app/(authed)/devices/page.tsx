@@ -13,9 +13,9 @@ import { formatDistanceToNow } from "date-fns"
 import type { AccountantDevice } from "@/types/api"
 
 function PlatformIcon({ platform }: { platform: string }) {
-  if (platform === "macos") return <Laptop className="h-4 w-4 text-zinc-400" />
-  if (platform === "windows") return <Monitor className="h-4 w-4 text-zinc-400" />
-  return <MonitorSmartphone className="h-4 w-4 text-zinc-400" />
+  if (platform === "macos") return <Laptop className="h-4 w-4 text-muted-foreground" />
+  if (platform === "windows") return <Monitor className="h-4 w-4 text-muted-foreground" />
+  return <MonitorSmartphone className="h-4 w-4 text-muted-foreground" />
 }
 
 export default function DevicesPage() {
@@ -44,8 +44,8 @@ export default function DevicesPage() {
       <Topbar title="Devices" />
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mb-6">
-          <h2 className="text-base font-semibold text-zinc-100">Registered Devices</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h2 className="text-base font-semibold text-foreground">Registered Devices</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             Devices that have signed in to your account. Revoke any you don't recognise.
           </p>
         </div>
@@ -59,18 +59,18 @@ export default function DevicesPage() {
             {(data?.devices ?? []).map((device: AccountantDevice) => (
               <div
                 key={device.id}
-                className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-5 py-4"
+                className="flex items-center justify-between rounded-xl border border-border bg-card px-5 py-4"
               >
                 <div className="flex items-center gap-4">
                   <PlatformIcon platform={device.platform} />
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-zinc-100">{device.device_label}</span>
+                      <span className="text-sm font-medium text-foreground">{device.device_label}</span>
                       {device.is_current_device && (
                         <Badge variant="indigo" className="text-[10px]">This device</Badge>
                       )}
                     </div>
-                    <p className="mt-0.5 text-xs text-zinc-500">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {device.platform} · {device.use_count} sign-in{device.use_count !== 1 ? "s" : ""} ·{" "}
                       last seen {formatDistanceToNow(new Date(device.last_seen_at), { addSuffix: true })}
                     </p>
@@ -91,7 +91,7 @@ export default function DevicesPage() {
             ))}
 
             {data?.devices?.length === 0 && (
-              <p className="text-sm text-zinc-500 text-center py-12">No devices registered yet.</p>
+              <p className="text-sm text-muted-foreground text-center py-12">No devices registered yet.</p>
             )}
           </div>
         )}

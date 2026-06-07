@@ -24,13 +24,16 @@ import {
 import { formatILS, toMajorUnits } from "@/lib/format/currency";
 import type { EarningsPeriod, OrgExpenseCategory } from "@/types/api";
 
-const GRID = "#27272a";
-const TICK = { fill: "#71717a", fontSize: 10 };
+// Theme-aware: tooltip uses CSS vars (resolve in inline styles in both modes);
+// axis ticks/lines use a translucent neutral that reads on light + dark.
+const GRID = "rgba(113,113,122,0.25)";
+const TICK = { fill: "rgb(113,113,122)", fontSize: 10 };
 const TOOLTIP_STYLE = {
-  background: "#18181b",
-  border: "1px solid #27272a",
+  background: "var(--popover)",
+  border: "1px solid var(--border)",
   borderRadius: 8,
   fontSize: 12,
+  color: "var(--popover-foreground)",
 } as const;
 const PIE_COLORS = [
   "#6366f1", "#10b981", "#3b82f6", "#f59e0b",
@@ -94,7 +97,7 @@ export function ExpenseCategoryChart({ categories }: { categories: OrgExpenseCat
       <PieChart>
         <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={78} paddingAngle={2}>
           {data.map((_, i) => (
-            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="#18181b" />
+            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="var(--card)" />
           ))}
         </Pie>
         <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value, name) => [formatILS(Number(value)), String(name)]} />
