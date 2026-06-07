@@ -199,6 +199,52 @@ def send_otp(to_email: str, otp: str) -> None:
     _send(to_email, subject, html, plain)
 
 
+def send_password_reset_email(to_email: str, code: str, ttl_minutes: int = 15) -> None:
+    """
+    Send a password-reset code to the accountant's work email.
+    Called from accountant_auth._send_reset_code(). Real provider only —
+    no SMS. Raises RuntimeError on HTTP/network error (caller wraps → 503).
+    """
+    subject = "Reset your Aurora portal password"
+    html = f"""
+<!DOCTYPE html>
+<html lang="en">
+<body style="margin:0;padding:40px 0;background:#09090b;font-family:system-ui,sans-serif;">
+  <div style="max-width:480px;margin:0 auto;background:#18181b;border:1px solid #27272a;
+              border-radius:12px;padding:40px;">
+    <div style="margin-bottom:28px;">
+      <div style="display:inline-block;background:#4f46e5;border-radius:8px;
+                  padding:10px 14px;font-size:20px;font-weight:700;color:#fff;
+                  letter-spacing:-0.5px;">A</div>
+    </div>
+    <h1 style="margin:0 0 8px;font-size:22px;color:#f4f4f5;font-weight:600;">
+      Reset your password
+    </h1>
+    <p style="margin:0 0 28px;color:#a1a1aa;font-size:14px;line-height:1.6;">
+      Enter this code in the Aurora LTS Accountant Portal to set a new password.
+      It expires in <strong style="color:#f4f4f5;">{ttl_minutes} minutes</strong>.
+    </p>
+    <div style="background:#09090b;border:1px solid #27272a;border-radius:8px;
+                padding:24px;text-align:center;margin-bottom:28px;">
+      <span style="font-size:32px;font-weight:700;letter-spacing:8px;
+                   color:#818cf8;font-variant-numeric:tabular-nums;">{code}</span>
+    </div>
+    <p style="margin:0;color:#71717a;font-size:12px;line-height:1.6;">
+      If you didn't request a password reset, you can safely ignore this email —
+      your password will not change.
+    </p>
+  </div>
+</body>
+</html>
+"""
+    plain = (
+        f"Your Aurora LTS password-reset code: {code}\n\n"
+        f"Enter it in the Accountant Portal. Expires in {ttl_minutes} minutes. "
+        f"If you didn't request this, ignore this email."
+    )
+    _send(to_email, subject, html, plain)
+
+
 def send_whatsapp_otp(to_phone_e164: str, otp: str) -> None:
     """
     Send a 6-digit OTP via WhatsApp Business Cloud API using the
