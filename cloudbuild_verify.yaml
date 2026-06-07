@@ -23,9 +23,34 @@ steps:
       - python
       - -c
       - "import app.main; print('IMPORT-GATE OK: app.main + all routers imported')"
-  - id: push
+  # Lifespan boot-gate: import-gate only IMPORTS app.main — it never runs the FastAPI
+  # startup lifespan (@app.on_event("startup") -> validate_backend_selectors, workers, …).
+  # TestClient(app) inside `with` runs + awaits that lifespan, so a broken startup fails
+  # the build BEFORE push (the gap that let a 503-ing image through during the v0.2.4 cutover).
+  # Dev mode (AURORA_RUNTIME=) -> backend_check WARNs, so no real secrets are needed in CI;
+  # the prod backend_check hard-fail stays validated at the no-traffic candidate boot.
+  - id: lifespan-gate
     name: gcr.io/cloud-builders/docker
     waitFor: [import-gate]
+    args:
+      - run
+      - --rm
+      - --env=AURORA_RUNTIME=
+      - --env=DATABASE_URL=sqlite:///./verify.db
+      - --env=SKIP_SEED_ADMIN=1
+      - ${_IMG}
+      - python
+      - -c
+      - |
+        from fastapi.testclient import TestClient
+        import app.main
+        with TestClient(app.main.app) as c:        # __enter__ runs + awaits the startup lifespan
+            r = c.get("/api/v1/onboarding/health")
+            assert r.status_code == 200, f"health returned {r.status_code}"
+        print("LIFESPAN-GATE OK: startup lifespan ran; /onboarding/health = 200")
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    waitFor: [lifespan-gate]
     args: ["push", "${_IMG}"]
 images:
   - ${_IMG}
