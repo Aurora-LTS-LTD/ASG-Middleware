@@ -1073,7 +1073,8 @@ async def confirm_invoice_handler(update: Update, context: ContextTypes.DEFAULT_
             # Set invoice to pending_allocation with first retry scheduled in 30s
             invoice_obj = db.query(Invoice).filter(Invoice.id == invoice_id).first()
             if invoice_obj:
-                invoice_obj.status = "pending_allocation"
+                from app.services.invoice_lifecycle import transition, PENDING_ALLOCATION
+                transition(db, invoice_obj, PENDING_ALLOCATION, actor="telegram_bot", commit=False)
                 invoice_obj.allocation_status = "retry_pending"
                 invoice_obj.allocation_retry_count = 1
                 invoice_obj.allocation_next_retry_at = (

@@ -123,10 +123,12 @@ async def process_pending_allocations(bot=None) -> int:
                 ita_response = {"success": False, "error": str(e)}
 
             if ita_response.get("success"):
-                # ── Success: set allocation, then finalize ──
+                # ── Success: record allocation, then finalize ──
+                # finalize_invoice() now accepts pending_allocation directly
+                # (with allocation_status already "approved" it skips the ITA
+                # call), so no status hack is needed.
                 invoice.allocation_number = ita_response["allocation_number"]
                 invoice.allocation_status = "approved"
-                invoice.status = "draft"   # Temporarily revert to draft so finalize() accepts it
                 db.commit()
 
                 try:
@@ -161,9 +163,12 @@ async def process_pending_allocations(bot=None) -> int:
                 print(f"[ALLOC_QUEUE] ❌ {invoice.invoice_number} retry #{invoice.allocation_retry_count} "
                       f"failed — next attempt in {delay_seconds}s")
 
-                # ── If max retries exhausted, notify user ──
+                # ── If max retries exhausted, mark terminal + notify ──
                 if invoice.allocation_retry_count >= MAX_RETRIES:
-                    print(f"[ALLOC_QUEUE] 🛑 {invoice.invoice_number} exceeded max retries")
+                    # Terminal: was silently stuck in pending_allocation forever.
+                    invoice.allocation_status = "rejected"
+                    db.commit()
+                    print(f"[ALLOC_QUEUE] 🛑 {invoice.invoice_number} exceeded max retries — marked rejected")
                     db.add(ActionLog(
                         business_id=invoice.business_id,
                         status="error",

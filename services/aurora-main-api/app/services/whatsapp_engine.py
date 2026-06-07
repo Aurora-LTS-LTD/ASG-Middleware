@@ -1113,7 +1113,8 @@ async def _flow_invoice_confirm(
         # Queue retry — tell user we're waiting.
         inv_row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
         if inv_row:
-            inv_row.status = "pending_allocation"
+            from app.services.invoice_lifecycle import transition, PENDING_ALLOCATION
+            transition(db, inv_row, PENDING_ALLOCATION, actor="whatsapp_bot", commit=False)
             inv_row.allocation_status = "retry_pending"
             inv_row.allocation_retry_count = 1
             inv_row.allocation_next_retry_at = (

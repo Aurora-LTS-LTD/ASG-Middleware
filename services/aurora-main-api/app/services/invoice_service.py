@@ -39,6 +39,12 @@ from app.services.tax_compliance import (
 # extends the signature with optional invoice_id + retry_count kwargs
 # that drive idempotency on the production path.
 from app.services.ita import request_allocation_number
+from app.services.invoice_lifecycle import (
+    transition,
+    DRAFT,
+    PENDING_ALLOCATION,
+    FINALIZED,
+)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -228,12 +234,17 @@ async def finalize_invoice(
     if not invoice:
         raise InvoiceNotFoundError(f"Invoice {invoice_id} not found")
 
-    if invoice.status != "draft":
+    # draft (REST path) or pending_allocation (retry-queue path, allocation
+    # already approved) may finalize. The central state machine enforces the
+    # rest; this guard just rejects already-finalized/sent/cancelled invoices.
+    if invoice.status not in (DRAFT, PENDING_ALLOCATION):
         raise InvoiceStateError(invoice.status)
 
     # ── Request allocation number if needed ──
     if invoice.requires_allocation == 1 and invoice.allocation_status == "pending":
         print(f"[INVOICE_SERVICE] Requesting allocation for {invoice.invoice_number} via {actor_label}...")
+        # "Submitted" — first time an allocation request leaves for ITA.
+        invoice.submitted_at = invoice.submitted_at or datetime.datetime.utcnow()
 
         # P1-05: resolve the real seller tax_id from the owning Business —
         # raises SellerTaxIdMissing (caught by caller as 4xx/5xx) if the
@@ -277,12 +288,10 @@ async def finalize_invoice(
                 f"ITA service unavailable for invoice {invoice.invoice_number}"
             )
 
-    # ── Lock the invoice ──
-    invoice.status = "finalized"
-    invoice.finalized_at = datetime.datetime.utcnow()
+    # ── Lock the invoice via the central state machine ──
+    # (draft|pending_allocation → finalized; stamps finalized_at + audit + commit)
     invoice.due_date = datetime.datetime.utcnow() + datetime.timedelta(days=30)
-    db.commit()
-    db.refresh(invoice)
+    transition(db, invoice, FINALIZED, actor=actor_label)
 
     # ── Publish ExecEvent for the CEO Alert Stream (defensive)
     try:
