@@ -292,15 +292,24 @@ async def startup():
             "to run inline)."
         )
 
-    # ── Start WhatsApp outbound-resend worker (always on) ──
+    # Operational kill-switch for the background workers (resend / allocation /
+    # digest). Default off (workers run); set AURORA_DISABLE_WORKERS=1 to skip
+    # them — useful for local SQLite dev (a worker's open write txn otherwise
+    # contends with request handlers) and for read-only / maintenance instances.
+    _disable_workers = os.getenv("AURORA_DISABLE_WORKERS", "").strip().lower() in ("1", "true")
+
+    # ── Start WhatsApp outbound-resend worker (always on unless disabled) ──
     # Safe to run even if Meta creds aren't set — the worker no-ops
     # until is_configured() is true, then starts draining the queue.
-    try:
-        from app.services.whatsapp_resend import whatsapp_resend_loop
-        asyncio.create_task(whatsapp_resend_loop())
-        print("[STARTUP] ✅ WhatsApp resend worker started")
-    except Exception as e:
-        print(f"[STARTUP] ⚠️ WhatsApp resend worker failed to start: {e}")
+    if _disable_workers:
+        print("[STARTUP] Background workers disabled (AURORA_DISABLE_WORKERS)")
+    else:
+        try:
+            from app.services.whatsapp_resend import whatsapp_resend_loop
+            asyncio.create_task(whatsapp_resend_loop())
+            print("[STARTUP] ✅ WhatsApp resend worker started")
+        except Exception as e:
+            print(f"[STARTUP] ⚠️ WhatsApp resend worker failed to start: {e}")
 
     # ── Seed default admin user (dev only — never runs on Cloud Run) ──
     # Credentials are read from environment variables so they are NEVER
@@ -368,7 +377,7 @@ async def startup():
     # The bot runs as part of this FastAPI process — no separate process needed.
     # Updates arrive via the POST /webhook/telegram/{secret} endpoint.
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    if telegram_token:
+    if telegram_token and not _disable_workers:
         try:
             from app.services.telegram_bot import (
                 init_application,
