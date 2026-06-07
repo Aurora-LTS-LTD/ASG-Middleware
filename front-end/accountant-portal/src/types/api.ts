@@ -72,6 +72,38 @@ export interface OtpVerifyResponse {
 }
 
 // ─────────────────────────────────────────────────────────────
+// /login (email + password) — returns the same shape as OtpVerifyResponse
+// ─────────────────────────────────────────────────────────────
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+  device_fingerprint: string;
+  platform: Platform;
+  device_label: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// /forgot-password + /reset-password (email recovery)
+// ─────────────────────────────────────────────────────────────
+
+export interface ForgotPasswordResponse {
+  ok: true;
+  sent_to: string;             // masked email for confirmation UX
+  expires_in_seconds: number;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  code: string;
+  new_password: string;
+}
+
+export interface OkResponse {
+  ok: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────
 // /refresh
 // ─────────────────────────────────────────────────────────────
 

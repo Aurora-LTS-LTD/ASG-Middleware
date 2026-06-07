@@ -3,24 +3,21 @@
 /**
  * Aurora LTS Accountant Portal — Login + post-login stub.
  *
- * Phase 2 deliverable. The login UI was scaffolded in Phase 1; this
- * version wires it to the real backend at api-aurora-lts.com via
- * `useAuth()` (which composes `src/lib/api/client.ts` + the OS-native
- * keychain in src-tauri/src/lib.rs).
+ * Production auth: email + password is the primary sign-in (real bcrypt on M1).
+ * A one-time email code (OTP) remains available as an alternate, and
+ * "Forgot password?" routes to the email recovery flow at /forgot-password.
  *
  * Three states (controlled by `useAuth().status`):
  *   • initializing  — keychain bootstrap in progress (split-second flash)
- *   • signed_out    — login form (email step → OTP step)
+ *   • signed_out    — login form (password | email-code)
  *   • signed_in     — placeholder dashboard with sign-out + device summary
  *
- * Error rendering surfaces the backend's structured error codes:
- *   otp_rate_limited  → countdown banner ("retry in 14:32")
- *   otp_invalid       → "Wrong code. 2 attempts remaining."
- *   otp_locked        → "Account locked. Try again in 15:00."
- *   otp_expired       → "Code expired. Request a new one."
+ * Error rendering surfaces the backend's structured error codes
+ * (invalid_credentials, otp_invalid, otp_locked, otp_rate_limited, …).
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -53,6 +50,13 @@ const emailSchema = z.object({
   }),
 });
 
+const passwordSchema = z.object({
+  email: z.string().email({
+    message: "Please enter a valid work email address.",
+  }),
+  password: z.string().min(1, { message: "Enter your password." }),
+});
+
 const otpSchema = z.object({
   otp: z
     .string()
@@ -79,17 +83,23 @@ export default function Home() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Login flow
+// Login flow — password primary, email-code alternate
 // ─────────────────────────────────────────────────────────────
 
 function LoginView() {
-  const { requestOtp, verifyOtp, isNewDevice } = useAuth();
+  const { requestOtp, verifyOtp, loginWithPassword } = useAuth();
 
+  const [mode, setMode] = useState<"password" | "otp">("password");
   const [step, setStep] = useState<"email" | "otp">("email");
   const [loading, setLoading] = useState(false);
   const [currentEmail, setCurrentEmail] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<{ code: string; message: string; retry_after_seconds?: number } | null>(null);
+
+  const passwordForm = useForm<z.infer<typeof passwordSchema>>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { email: "", password: "" },
+  });
 
   const emailForm = useForm<z.infer<typeof emailSchema>>({
     resolver: zodResolver(emailSchema),
@@ -100,6 +110,19 @@ function LoginView() {
     resolver: zodResolver(otpSchema),
     defaultValues: { otp: "" },
   });
+
+  async function onPasswordSubmit(values: z.infer<typeof passwordSchema>) {
+    setLoading(true);
+    setError(null);
+    try {
+      await loginWithPassword({ email: values.email, password: values.password });
+      // useAuth() transitions to signed_in → Home re-renders SignedInView
+    } catch (err) {
+      handleApiError(err, setError);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function onEmailSubmit(values: z.infer<typeof emailSchema>) {
     setLoading(true);
@@ -121,13 +144,24 @@ function LoginView() {
     setError(null);
     try {
       await verifyOtp({ email: currentEmail, otp: values.otp });
-      // useAuth() transitions to signed_in → Home re-renders SignedInView
     } catch (err) {
       handleApiError(err, setError);
     } finally {
       setLoading(false);
     }
   }
+
+  const description =
+    mode === "password"
+      ? "Secure accountant access terminal"
+      : step === "email"
+        ? "We'll email you a one-time sign-in code"
+        : sentTo
+          ? `Enter the code we sent to ${sentTo}`
+          : "Enter the verification code";
+
+  const inputClass =
+    "bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-indigo-500";
 
   return (
     <Centered>
@@ -142,32 +176,36 @@ function LoginView() {
             Aurora LTS Portal
           </CardTitle>
           <CardDescription className="text-center text-zinc-400">
-            {step === "email"
-              ? "Secure accountant access terminal"
-              : sentTo
-                ? `Enter the code we sent to ${sentTo}`
-                : "Enter the verification code"}
+            {description}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {error && <InlineError error={error} onDismiss={() => setError(null)} />}
 
-          {step === "email" && (
-            <Form {...emailForm}>
-              <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-4">
+          {mode === "password" && (
+            <Form {...passwordForm}>
+              <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
                 <FormField
-                  control={emailForm.control}
+                  control={passwordForm.control}
                   name="email"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-zinc-300">Work Email</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="accountant@agency.com"
-                          autoComplete="email"
-                          {...field}
-                          className="bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-indigo-500"
-                        />
+                        <Input placeholder="accountant@agency.com" autoComplete="email" {...field} className={inputClass} />
+                      </FormControl>
+                      <FormMessage className="text-red-400" />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={passwordForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-300">Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="••••••••" autoComplete="current-password" {...field} className={inputClass} />
                       </FormControl>
                       <FormMessage className="text-red-400" />
                     </FormItem>
@@ -178,13 +216,61 @@ function LoginView() {
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
                   disabled={loading}
                 >
-                  {loading ? "Sending code…" : "Continue"}
+                  {loading ? "Signing in…" : "Sign In"}
                 </Button>
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setMode("otp"); setStep("email"); setError(null); }}
+                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    Sign in with email code
+                  </button>
+                  <Link href="/forgot-password" className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
+                    Forgot password?
+                  </Link>
+                </div>
               </form>
             </Form>
           )}
 
-          {step === "otp" && (
+          {mode === "otp" && step === "email" && (
+            <Form {...emailForm}>
+              <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-4">
+                <FormField
+                  control={emailForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-300">Work Email</FormLabel>
+                      <FormControl>
+                        <Input placeholder="accountant@agency.com" autoComplete="email" {...field} className={inputClass} />
+                      </FormControl>
+                      <FormMessage className="text-red-400" />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="submit"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                  disabled={loading}
+                >
+                  {loading ? "Sending code…" : "Send code"}
+                </Button>
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setMode("password"); setError(null); }}
+                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    Use password instead
+                  </button>
+                </div>
+              </form>
+            </Form>
+          )}
+
+          {mode === "otp" && step === "otp" && (
             <Form {...otpForm}>
               <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-4">
                 <FormField
@@ -392,7 +478,10 @@ function InlineError({
   onDismiss: () => void;
 }) {
   const isLockout =
-    error.code === "otp_locked" || error.code === "otp_rate_limited";
+    error.code === "otp_locked" ||
+    error.code === "otp_rate_limited" ||
+    error.code === "reset_locked" ||
+    error.code === "reset_rate_limited";
   return (
     <div
       role="alert"

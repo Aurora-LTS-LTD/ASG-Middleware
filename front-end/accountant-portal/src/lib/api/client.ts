@@ -31,6 +31,10 @@ import type {
   OtpSendResponse,
   OtpVerifyRequest,
   OtpVerifyResponse,
+  LoginRequest,
+  ForgotPasswordResponse,
+  ResetPasswordRequest,
+  OkResponse,
   RefreshResponse,
   LogoutRequest,
   LogoutResponse,
@@ -372,6 +376,41 @@ export const api = {
     });
     await persistTokens(data);
     return data;
+  },
+
+  /** Email + password sign-in. Same response shape as otpVerify; persists tokens. */
+  async login(req: LoginRequest): Promise<OtpVerifyResponse> {
+    const data = await call<OtpVerifyResponse>("/api/v1/accountant/login", {
+      method: "POST",
+      body: req,
+    });
+    await persistTokens(data);
+    return data;
+  },
+
+  /** Request a password-reset code by email. Anti-enumeration on backend. */
+  async forgotPassword(email: string): Promise<ForgotPasswordResponse> {
+    return call<ForgotPasswordResponse>("/api/v1/accountant/forgot-password", {
+      method: "POST",
+      body: { email },
+    });
+  },
+
+  /** Complete a password reset with the emailed code. */
+  async resetPassword(req: ResetPasswordRequest): Promise<OkResponse> {
+    return call<OkResponse>("/api/v1/accountant/reset-password", {
+      method: "POST",
+      body: req,
+    });
+  },
+
+  /** Change password while signed in (revokes other devices' sessions). */
+  async changePassword(req: { old_password: string; new_password: string }): Promise<OkResponse> {
+    return call<OkResponse>("/api/v1/accountant/change-password", {
+      method: "POST",
+      body: req,
+      authRequired: true,
+    });
   },
 
   /** Manual refresh — usually unneeded, the client refreshes proactively. */
