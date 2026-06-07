@@ -256,6 +256,7 @@ class User(Base):
     full_name = Column(String, nullable=False)
     first_name = Column(String, nullable=True)       # Sprint 1 addition (split from full_name)
     last_name = Column(String, nullable=True)        # Sprint 1 addition
+    firm_name = Column(String, nullable=True)        # Accountant firm / practice name (editable in portal Settings)
     fax = Column(String, nullable=True)              # Optional, Israeli regulatory legacy
 
     role = Column(String, default="business_owner")
