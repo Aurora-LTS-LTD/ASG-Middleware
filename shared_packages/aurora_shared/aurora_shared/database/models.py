@@ -2982,6 +2982,49 @@ class AccountantOtpAttempt(Base):
 
 
 # ═══════════════════════════════════════════════════════════════
+# MODEL: AccountantPasswordReset   (Production email password recovery)
+# ═══════════════════════════════════════════════════════════════
+# Single-use, hashed, short-TTL reset codes for the accountant portal's
+# email-based password recovery. Separate table from AccountantOtpAttempt
+# (different TTL/semantics): longer window (the user reads an email + types
+# a code), attempt-capped, one-shot.
+#
+# Lifecycle:
+#   1. /forgot-password creates a row (15-min TTL, attempts_count=0)
+#   2. /reset-password increments attempts_count on each wrong code
+#   3. After N wrong attempts → locked_until = now + lockout
+#   4. Success → consumed_at = now (one-shot); all refresh tokens revoked
+# Plaintext codes are NEVER stored — only the SHA-256 hash.
+# ═══════════════════════════════════════════════════════════════
+class AccountantPasswordReset(Base):
+    __tablename__ = "accountant_password_resets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(120), nullable=False, index=True)
+
+    code_hash = Column(String(64), nullable=False)
+    # SHA-256 of the reset code. We never store the plaintext.
+
+    issued_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    attempts_count = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    consumed_at = Column(DateTime, nullable=True)
+
+    ip_hash = Column(String(64), nullable=False)
+    # SHA-256 of caller IP. Used by rate-limiting + audit.
+
+    __table_args__ = (
+        Index(
+            "ix_accountant_password_resets_email_recent",
+            "email", "issued_at",
+            postgresql_where=sa_text("consumed_at IS NULL"),
+        ),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
 # MODEL: ClientDocument   (Sprint 8.3 — Document Vault DB Layer)
 # ═══════════════════════════════════════════════════════════════
 # Every file that lands in the Document Vault — whether forwarded by

@@ -55,11 +55,13 @@ from aurora_shared.database.models import (
     AccountantDevice,
     AccountantRefreshToken,
     AccountantOtpAttempt,
+    AccountantPasswordReset,
     AccountantEngagement,
     ActionLog,
 )
 from aurora_shared.middleware.auth_middleware import require_accountant  # noqa: F401 — re-exported for Vault router
 from aurora_shared.middleware.rate_limit import limiter
+from aurora_shared.services.auth_service import hash_password, verify_password
 from app.services import sendgrid_client
 
 log = logging.getLogger(__name__)
@@ -83,6 +85,14 @@ DEVICES_PER_USER_MAX = 5                  # advisory; new device beyond N → al
 
 JWT_ALGO = "HS256"
 JWT_ISSUER = "aurora-accountant"
+
+# Password recovery (email-based; no SMS). Reset codes are hashed + single-use.
+RESET_CODE_TTL_MINUTES = 15
+RESET_MAX_ATTEMPTS = 5
+RESET_LOCKOUT_MINUTES = 15
+RESET_RATE_LIMIT_WINDOW_MINUTES = 15
+RESET_RATE_LIMIT_PER_EMAIL = 3   # >3 forgot-password requests in 15min → 429
+MIN_PASSWORD_LENGTH = 10
 
 
 # ─────────────────────────────────────────────────────────────
@@ -168,6 +178,28 @@ class OtpVerifyResponse(BaseModel):
     user: AccountantUserPayload
 
 
+class LoginRequest(BaseModel):
+    """Email + password sign-in (mirrors OtpVerifyRequest, swapping otp→password)."""
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=1, max_length=200)
+    device_fingerprint: str = Field(..., min_length=64, max_length=64)
+    platform: str = Field(..., pattern=r"^(macos|windows|linux)$")
+    device_label: str = Field(..., min_length=1, max_length=120)
+
+    @field_validator("email")
+    @classmethod
+    def _email_shape(cls, v: str) -> str:
+        return _validate_email_shape(v)
+
+    @field_validator("device_fingerprint")
+    @classmethod
+    def hex_only(cls, v: str) -> str:
+        low = v.lower()
+        if not all(c in "0123456789abcdef" for c in low):
+            raise ValueError("device_fingerprint must be 64-char lowercase hex")
+        return low
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str = Field(..., min_length=20, max_length=200)
     device_fingerprint: str = Field(..., min_length=64, max_length=64)
@@ -184,6 +216,56 @@ class RefreshResponse(BaseModel):
     refresh_token: str
     access_token_expires_at: str
     refresh_token_expires_at: str
+
+
+def _validate_password_strength(v: str) -> str:
+    v = v or ""
+    if len(v) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"password must be at least {MIN_PASSWORD_LENGTH} characters")
+    if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
+        raise ValueError("password must contain at least one letter and one number")
+    return v
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def _email_shape(cls, v: str) -> str:
+        return _validate_email_shape(v)
+
+
+class ForgotPasswordResponse(BaseModel):
+    ok: bool
+    sent_to: str
+    expires_in_seconds: int
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254)
+    code: str = Field(..., min_length=6, max_length=16)
+    new_password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=200)
+
+    @field_validator("email")
+    @classmethod
+    def _email_shape(cls, v: str) -> str:
+        return _validate_email_shape(v)
+
+    @field_validator("new_password")
+    @classmethod
+    def _pw_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=1, max_length=200)
+    new_password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=200)
+
+    @field_validator("new_password")
+    @classmethod
+    def _pw_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
 
 class LogoutRequest(BaseModel):
@@ -424,6 +506,150 @@ def _enforce_rate_limit(db: Session, email: str, ip_hash: str) -> None:
             },
             headers={"Retry-After": str(OTP_RATE_LIMIT_WINDOW_MINUTES * 60)},
         )
+
+
+# ── Password auth helpers ──
+
+_dummy_hash_cache: Optional[str] = None
+
+
+def _dummy_password_hash() -> str:
+    """A real bcrypt hash of a random string, computed once.
+
+    Verified against on the user-not-found / null-password path so /login takes
+    roughly the same time whether or not the email exists (anti-timing-oracle).
+    """
+    global _dummy_hash_cache
+    if _dummy_hash_cache is None:
+        _dummy_hash_cache = hash_password(secrets.token_urlsafe(24))
+    return _dummy_hash_cache
+
+
+# Reset-code alphabet: uppercase, no ambiguous chars (no I/O/0/1).
+_RESET_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def _generate_reset_code() -> str:
+    """Cryptographically secure 8-char reset code (~10^12 space)."""
+    return "".join(secrets.choice(_RESET_ALPHABET) for _ in range(8))
+
+
+def _send_reset_code(email: str, code: str) -> None:
+    """Email the reset code via SendGrid. No SMS. Stub mode logs it in dev."""
+    backend = (os.getenv("OTP_BACKEND") or "stub").lower()
+    if backend != "production":
+        log.warning("[RESET_STUB] DEV-MODE reset code for %s: %s", email, code)
+        print(f"🔑 [RESET DEV] {email} → {code}", flush=True)
+        return
+    try:
+        sendgrid_client.send_password_reset_email(email, code, ttl_minutes=RESET_CODE_TTL_MINUTES)
+    except RuntimeError as exc:
+        log.error("[reset] delivery failed email=%s: %s", email, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "reset_delivery_failed",
+                "message": "Could not send the reset email. Please try again.",
+            },
+        ) from exc
+
+
+def _enroll_device_and_issue_tokens(
+    db: Session,
+    user: User,
+    fingerprint: str,
+    platform: str,
+    device_label: str,
+    ip_hash: str,
+    now: datetime.datetime,
+    signin_status: str,
+) -> tuple[OtpVerifyResponse, bool, "AccountantDevice"]:
+    """Upsert the device, mint access+refresh tokens, audit, commit.
+
+    Shared by the password /login path. Mirrors steps 6–8 of /otp/verify (which
+    keeps its own inline copy to avoid touching the shipped OTP flow). Caller is
+    responsible for firing the new-device alert AFTER commit when is_new is True.
+    """
+    fingerprint = fingerprint.lower()
+    existing_device = (
+        db.query(AccountantDevice)
+        .filter(AccountantDevice.user_id == user.id)
+        .filter(AccountantDevice.device_fingerprint == fingerprint)
+        .filter(AccountantDevice.revoked_at.is_(None))
+        .first()
+    )
+    is_new_device = existing_device is None
+
+    if existing_device:
+        existing_device.last_seen_at = now
+        existing_device.last_seen_ip_hash = ip_hash
+        existing_device.use_count = (existing_device.use_count or 0) + 1
+        if device_label and device_label != existing_device.device_label:
+            existing_device.device_label = device_label
+        device_row = existing_device
+    else:
+        device_row = AccountantDevice(
+            user_id=user.id,
+            device_fingerprint=fingerprint,
+            platform=platform,
+            device_label=device_label,
+            ip_hash_first=ip_hash,
+            last_seen_at=now,
+            last_seen_ip_hash=ip_hash,
+            use_count=1,
+            enrolled_at=now,
+            new_device_alert_sent_at=now,
+        )
+        db.add(device_row)
+        db.flush()
+
+    db.add(
+        ActionLog(
+            status=(f"{signin_status}_new_device" if is_new_device else signin_status),
+            detail=(
+                f"user_id={user.id} email={user.email} platform={platform} "
+                f"label={device_label!r} fingerprint={fingerprint[:16]}… "
+                f"ip_hash={ip_hash[:16]}…"
+            ),
+            triggered_at=now,
+        )
+    )
+
+    access_token, access_expires = _issue_access_token(
+        user_id=user.id, email=user.email, device_id=device_row.id
+    )
+    refresh_raw = _generate_refresh_token()
+    refresh_hash = _sha256_hex(refresh_raw)
+    refresh_expires = now + datetime.timedelta(days=REFRESH_TOKEN_TTL_DAYS)
+    db.add(
+        AccountantRefreshToken(
+            user_id=user.id,
+            device_id=device_row.id,
+            token_hash=refresh_hash,
+            issued_at=now,
+            expires_at=refresh_expires,
+            last_used_ip_hash=ip_hash,
+        )
+    )
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        log.error("[login] commit failed: %s", e)
+        raise HTTPException(500, detail={"error": "db_commit_failed"})
+
+    resp = OtpVerifyResponse(
+        ok=True,
+        access_token=access_token,
+        refresh_token=refresh_raw,
+        access_token_expires_at=_iso(access_expires),
+        refresh_token_expires_at=_iso(refresh_expires),
+        device_id=device_row.id,
+        is_new_device=is_new_device,
+        user=_user_payload(user, db),
+    )
+    return resp, is_new_device, device_row
 
 
 # ─────────────────────────────────────────────────────────────
@@ -855,6 +1081,265 @@ def logout(
                 "[logout] revoked rt_id=%s user_id=%s device_id=%s",
                 rt.id, rt.user_id, rt.device_id,
             )
+    return {"ok": True}
+
+
+@router.post("/login", response_model=OtpVerifyResponse)
+@limiter.limit("10/minute")
+def login(
+    body: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Email + password sign-in. Enrolls the device + issues tokens exactly like
+    /otp/verify, but gated on a bcrypt password check instead of an OTP. OTP
+    sign-in (/otp/send + /otp/verify) remains available in parallel."""
+    _signing_key()  # fail fast if JWT secret missing
+    email = body.email.lower()
+    ip_hash = _ip_hash(request)
+    now = _now()
+
+    user = _resolve_accountant(db, email)
+    # Always run a bcrypt verify (real hash if the user exists, dummy otherwise)
+    # so response time doesn't reveal whether the email is registered.
+    stored_hash = user.password_hash if (user and user.password_hash) else _dummy_password_hash()
+    try:
+        password_ok = verify_password(body.password, stored_hash)
+    except Exception:
+        password_ok = False
+
+    if not user or not password_ok:
+        db.add(
+            ActionLog(
+                status="accountant_login_failed",
+                detail=f"email={email} ip_hash={ip_hash[:16]}…",
+                triggered_at=now,
+            )
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "invalid_credentials", "message": "Email or password is incorrect."},
+        )
+
+    resp, is_new_device, device_row = _enroll_device_and_issue_tokens(
+        db, user, body.device_fingerprint, body.platform, body.device_label,
+        ip_hash, now, signin_status="accountant_login",
+    )
+    log.info("[login] user_id=%s device_id=%s is_new=%s", user.id, device_row.id, is_new_device)
+    if is_new_device:
+        _send_new_device_alert(user, device_row)
+
+    response.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+@limiter.limit("5/minute")
+def forgot_password(
+    body: ForgotPasswordRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Issue a single-use password-reset code via email. Always returns the same
+    shape (anti-enumeration); a code is created + sent only for a real accountant."""
+    email = body.email.lower()
+    ip_hash = _ip_hash(request)
+    now = _now()
+
+    # Rate limit per email (only reset rows count; unknown emails are absorbed).
+    cutoff = now - datetime.timedelta(minutes=RESET_RATE_LIMIT_WINDOW_MINUTES)
+    recent = (
+        db.query(AccountantPasswordReset)
+        .filter(AccountantPasswordReset.email == email)
+        .filter(AccountantPasswordReset.issued_at > cutoff)
+        .count()
+    )
+    if recent >= RESET_RATE_LIMIT_PER_EMAIL:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "reset_rate_limited",
+                "message": f"Too many reset requests. Try again in {RESET_RATE_LIMIT_WINDOW_MINUTES} minutes.",
+                "retry_after_seconds": RESET_RATE_LIMIT_WINDOW_MINUTES * 60,
+            },
+            headers={"Retry-After": str(RESET_RATE_LIMIT_WINDOW_MINUTES * 60)},
+        )
+
+    user = _resolve_accountant(db, email)
+    if user:
+        code = _generate_reset_code()
+        db.add(
+            AccountantPasswordReset(
+                email=email,
+                code_hash=_sha256_hex(code),
+                issued_at=now,
+                expires_at=now + datetime.timedelta(minutes=RESET_CODE_TTL_MINUTES),
+                ip_hash=ip_hash,
+            )
+        )
+        db.add(
+            ActionLog(
+                status="accountant_password_reset_requested",
+                detail=f"user_id={user.id} email={email} ip_hash={ip_hash[:16]}…",
+                triggered_at=now,
+            )
+        )
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            log.error("[forgot-password] commit failed: %s", e)
+            raise HTTPException(500, detail={"error": "db_commit_failed"})
+        _send_reset_code(email, code)
+        log.info("[forgot-password] reset code issued user_id=%s", user.id)
+    else:
+        log.warning("[forgot-password] no active accountant for email=%s — absorbed", email)
+
+    response.headers["Cache-Control"] = "no-store"
+    return ForgotPasswordResponse(
+        ok=True,
+        sent_to=_mask_email(email),
+        expires_in_seconds=RESET_CODE_TTL_MINUTES * 60,
+    )
+
+
+@router.post("/reset-password")
+def reset_password(
+    body: ResetPasswordRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Validate a reset code + set a new password. Single-use, attempt-capped.
+    On success, revokes ALL of the user's refresh tokens (forces re-login)."""
+    email = body.email.lower()
+    now = _now()
+
+    pr = (
+        db.query(AccountantPasswordReset)
+        .filter(AccountantPasswordReset.email == email)
+        .filter(AccountantPasswordReset.consumed_at.is_(None))
+        .order_by(AccountantPasswordReset.issued_at.desc())
+        .first()
+    )
+    if not pr:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "reset_code_invalid", "message": "Invalid or expired reset code."},
+        )
+
+    if pr.locked_until and pr.locked_until > now:
+        retry_after = int((pr.locked_until - now).total_seconds())
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "reset_locked",
+                "message": f"Too many wrong attempts. Try again in {retry_after // 60} minutes.",
+                "retry_after_seconds": retry_after,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    if pr.expires_at < now:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "reset_code_expired", "message": "This reset code has expired. Request a new one."},
+        )
+
+    submitted_hash = _sha256_hex(body.code.strip().upper())
+    if not secrets.compare_digest(submitted_hash, pr.code_hash):
+        pr.attempts_count = (pr.attempts_count or 0) + 1
+        left = RESET_MAX_ATTEMPTS - pr.attempts_count
+        if left <= 0:
+            pr.locked_until = now + datetime.timedelta(minutes=RESET_LOCKOUT_MINUTES)
+            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "reset_locked",
+                    "message": f"Too many wrong attempts. Locked for {RESET_LOCKOUT_MINUTES} minutes.",
+                    "retry_after_seconds": RESET_LOCKOUT_MINUTES * 60,
+                },
+            )
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "reset_code_invalid",
+                "message": f"Invalid reset code. {left} attempts remaining.",
+                "attempts_remaining": left,
+            },
+        )
+
+    # Code correct → re-resolve the accountant (must still be valid).
+    user = _resolve_accountant(db, email)
+    if not user:
+        pr.consumed_at = now
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "reset_code_invalid", "message": "Invalid or expired reset code."},
+        )
+
+    pr.consumed_at = now
+    user.password_hash = hash_password(body.new_password)
+    # A password reset invalidates every live session.
+    db.query(AccountantRefreshToken).filter(
+        AccountantRefreshToken.user_id == user.id,
+        AccountantRefreshToken.revoked_at.is_(None),
+        AccountantRefreshToken.used_at.is_(None),
+    ).update({"revoked_at": now, "revoked_reason": "password_reset"})
+    db.add(
+        ActionLog(
+            status="accountant_password_reset_completed",
+            detail=f"user_id={user.id} email={email}",
+            triggered_at=now,
+        )
+    )
+    db.commit()
+    log.info("[reset-password] user_id=%s password reset", user.id)
+
+    response.headers["Cache-Control"] = "no-store"
+    return {"ok": True}
+
+
+@router.post("/change-password")
+def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    auth: tuple = Depends(require_accountant),
+):
+    """Authenticated password change. Verifies the old password, sets the new
+    one, and revokes refresh tokens on OTHER devices (current session survives)."""
+    user, current_device_id = auth
+    now = _now()
+
+    if not verify_password(body.old_password, user.password_hash or _dummy_password_hash()):
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "invalid_credentials", "message": "Current password is incorrect."},
+        )
+
+    user.password_hash = hash_password(body.new_password)
+    db.query(AccountantRefreshToken).filter(
+        AccountantRefreshToken.user_id == user.id,
+        AccountantRefreshToken.device_id != current_device_id,
+        AccountantRefreshToken.revoked_at.is_(None),
+        AccountantRefreshToken.used_at.is_(None),
+    ).update({"revoked_at": now, "revoked_reason": "password_changed"})
+    db.add(
+        ActionLog(
+            status="accountant_password_changed",
+            detail=f"user_id={user.id} device_id={current_device_id}",
+            triggered_at=now,
+        )
+    )
+    db.commit()
+    log.info("[change-password] user_id=%s device_id=%s", user.id, current_device_id)
     return {"ok": True}
 
 

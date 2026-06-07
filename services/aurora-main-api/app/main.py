@@ -597,6 +597,13 @@ def _run_all_phase_migrations() -> None:
     except Exception as e:
         print(f"[STARTUP] Phase 26 APNs migration warning: {e}")
 
+    # ── Accountant Portal: email password-recovery table ──
+    try:
+        from app.migrations.migrate_phase27_accountant_password_reset import run as run_phase27
+        run_phase27()
+    except Exception as e:
+        print(f"[STARTUP] Phase 27 password-reset migration warning: {e}")
+
     # ── P2-23: Payment links table ──
     try:
         from app.migrations.migrate_phase25_payment_links import run as run_phase25
