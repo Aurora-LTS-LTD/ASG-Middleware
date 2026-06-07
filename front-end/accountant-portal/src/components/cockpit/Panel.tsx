@@ -23,16 +23,16 @@ export function PanelShell({
   const health = useEngineHealth(engine);
 
   return (
-    <section className="flex h-full min-w-0 flex-col bg-zinc-950">
-      <header className="flex items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-900/40 px-4 py-2.5">
+    <section className="flex h-full min-w-0 flex-col bg-background">
+      <header className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <HealthDot health={health} />
           <div className="min-w-0">
             <h2 className={`truncate text-sm font-semibold ${accent}`}>{engine.label}</h2>
-            <p className="truncate text-[10px] text-zinc-600">{engine.url}</p>
+            <p className="truncate text-[10px] text-muted-foreground">{engine.url}</p>
           </div>
         </div>
-        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           {health.detail}
         </span>
       </header>
@@ -53,8 +53,8 @@ export function PanelSection({
   return (
     <div className="mb-5">
       <div className="mb-2 flex items-baseline justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{title}</h3>
-        {hint && <span className="text-[10px] text-zinc-600">{hint}</span>}
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+        {hint && <span className="text-[10px] text-muted-foreground">{hint}</span>}
       </div>
       {children}
     </div>
@@ -68,9 +68,9 @@ export function PanelSection({
  */
 export function EndpointPending({ label, path }: { label: React.ReactNode; path?: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-900/30 p-3">
-      <div className="text-sm text-zinc-300">{label}</div>
-      <div className="mt-0.5 text-[11px] text-zinc-600">
+    <div className="rounded-lg border border-dashed border-border bg-card/30 p-3">
+      <div className="text-sm text-foreground">{label}</div>
+      <div className="mt-0.5 text-[11px] text-muted-foreground">
         No backend endpoint yet{path ? ` — expected ${path}` : ""}. Wire this once the
         route ships.
       </div>

@@ -93,26 +93,26 @@ export default function DashboardPage() {
       <Topbar title="Dashboard" />
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mb-8">
-          <h2 className="text-xl font-semibold text-zinc-100">
+          <h2 className="text-xl font-semibold text-foreground">
             Welcome back, {firstName}
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {user?.firm_name ? `${user.firm_name} · ` : ""}Aurora LTS Accountant Portal
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {cards.map(({ label, description, icon: Icon, value, color }) => (
-            <Card key={label} className="border-zinc-800 bg-zinc-900">
+            <Card key={label} className="border-border bg-card">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardDescription className="text-xs text-zinc-500">{label}</CardDescription>
+                  <CardDescription className="text-xs text-muted-foreground">{label}</CardDescription>
                   <Icon className={`h-4 w-4 ${color}`} />
                 </div>
               </CardHeader>
               <CardContent>
                 <div className={`text-2xl font-bold ${color}`}>{value}</div>
-                <p className="mt-1 text-[11px] text-zinc-600">{description}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{description}</p>
               </CardContent>
             </Card>
           ))}
@@ -126,15 +126,15 @@ export default function DashboardPage() {
         )}
 
         <div className="mt-6">
-          <Card className="border-zinc-800 bg-zinc-900">
+          <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold text-zinc-200">
+                <CardTitle className="text-sm font-semibold text-foreground">
                   Earnings — last 12 months
                 </CardTitle>
                 <TrendingUp className="h-4 w-4 text-indigo-400" />
               </div>
-              <CardDescription className="text-xs text-zinc-500">
+              <CardDescription className="text-xs text-muted-foreground">
                 {earnings.data
                   ? `Lifetime paid ${formatILS(earnings.data.lifetime_total_paid_minor_units, { minorUnits: true })}`
                   : "Revenue-share accruals"}
@@ -142,7 +142,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               {earnings.isLoading ? (
-                <div className="h-[200px] animate-pulse rounded-lg bg-zinc-800/40" />
+                <div className="h-[200px] animate-pulse rounded-lg bg-muted/40" />
               ) : earnings.isError ? (
                 <p className="py-16 text-center text-sm text-amber-400/80">
                   Earnings service unreachable — retry shortly.
@@ -150,7 +150,7 @@ export default function DashboardPage() {
               ) : hasEarnings ? (
                 <EarningsTrendChart periods={earnings.data!.periods_last_12} />
               ) : (
-                <p className="py-16 text-center text-sm text-zinc-600">
+                <p className="py-16 text-center text-sm text-muted-foreground">
                   No earnings recorded yet. Your revenue-share accruals will appear here.
                 </p>
               )}

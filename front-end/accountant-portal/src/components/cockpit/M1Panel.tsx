@@ -59,10 +59,10 @@ export function M1Panel() {
       <PanelSection title="Accountant sync state" hint="live">
         <div className="grid grid-cols-3 gap-3">
           {kpis.map(({ label, value, Icon, color }) => (
-            <div key={label} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+            <div key={label} className="rounded-lg border border-border bg-card p-3">
               <Icon className={`h-4 w-4 ${color}`} />
               <div className={`mt-2 text-xl font-bold ${color}`}>{value}</div>
-              <div className="mt-0.5 text-[10px] text-zinc-600">{label}</div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground">{label}</div>
             </div>
           ))}
         </div>
@@ -75,17 +75,17 @@ export function M1Panel() {
 
       <PanelSection title="Client book" hint="live via apiM1">
         {book.isLoading ? (
-          <p className="text-[11px] text-zinc-600">Loading engagements…</p>
+          <p className="text-[11px] text-muted-foreground">Loading engagements…</p>
         ) : book.isError ? (
           <p className="text-[11px] text-amber-400/80">Book service unreachable — retry shortly.</p>
         ) : clients.length === 0 ? (
-          <p className="text-[11px] text-zinc-600">No active client engagements yet.</p>
+          <p className="text-[11px] text-muted-foreground">No active client engagements yet.</p>
         ) : (
           <ul className="space-y-2">
             {clients.map((c) => (
-              <li key={c.id} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+              <li key={c.id} className="rounded-lg border border-border bg-card p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-sm text-zinc-200">
+                  <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-sm text-foreground">
                     <Building2 className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
                     {c.display_name}
                   </span>
@@ -95,7 +95,7 @@ export function M1Panel() {
                     </span>
                   )}
                 </div>
-                <div className="mt-2 flex items-center gap-4 text-[11px] text-zinc-500">
+                <div className="mt-2 flex items-center gap-4 text-[11px] text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
                     <FileText className="h-3 w-3" />
                     {c.invoice_count} invoices

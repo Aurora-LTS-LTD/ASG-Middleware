@@ -37,7 +37,7 @@ export default function ClientsPage() {
       <Suspense
         fallback={
           <main className="flex-1 overflow-y-auto p-6">
-            <div className="text-sm text-zinc-600">Loading clients…</div>
+            <div className="text-sm text-muted-foreground">Loading clients…</div>
           </main>
         }
       >
@@ -64,21 +64,21 @@ function ClientsInner() {
     <main className="flex-1 overflow-hidden">
       <div className="flex h-full">
         {/* Master — client list */}
-        <aside className="w-80 shrink-0 overflow-y-auto border-r border-zinc-800 p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-            Your clients {clients.length > 0 && <span className="text-zinc-600">({clients.length})</span>}
+        <aside className="w-80 shrink-0 overflow-y-auto border-r border-border p-4">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Your clients {clients.length > 0 && <span className="text-muted-foreground">({clients.length})</span>}
           </h2>
 
           {book.isLoading ? (
             <div className="space-y-2">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-16 animate-pulse rounded-lg bg-zinc-900" />
+                <div key={i} className="h-16 animate-pulse rounded-lg bg-card" />
               ))}
             </div>
           ) : book.isError ? (
             <p className="text-[11px] text-amber-400/80">Client book unreachable — retry shortly.</p>
           ) : clients.length === 0 ? (
-            <p className="text-[11px] text-zinc-600">
+            <p className="text-[11px] text-muted-foreground">
               No active client engagements yet. Clients you&apos;re engaged with will appear here.
             </p>
           ) : (
@@ -99,8 +99,8 @@ function ClientsInner() {
         <section className="flex-1 overflow-y-auto p-6">
           {selectedId == null ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
-              <Building2 className="mb-4 h-10 w-10 text-zinc-700" />
-              <p className="text-sm text-zinc-500">Select a client to view their tax summary.</p>
+              <Building2 className="mb-4 h-10 w-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Select a client to view their tax summary.</p>
             </div>
           ) : (
             <ClientDetail orgId={selectedId} />
@@ -122,11 +122,11 @@ function ClientRow({
         className={`w-full rounded-lg border p-3 text-left transition-colors ${
           selected
             ? "border-indigo-500/50 bg-indigo-500/10"
-            : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+            : "border-border bg-card hover:border-border"
         }`}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-sm text-zinc-200">
+          <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-sm text-foreground">
             <Building2 className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
             {client.display_name}
           </span>
@@ -136,13 +136,13 @@ function ClientRow({
             </span>
           )}
         </div>
-        <div className="mt-1.5 flex items-center justify-between text-[11px] text-zinc-500">
+        <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <FileText className="h-3 w-3" />
             {client.invoice_count} inv
           </span>
           <span>{formatILS(client.outstanding_amount)} due</span>
-          <ChevronRight className="h-3.5 w-3.5 text-zinc-700" />
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
         </div>
       </button>
     </li>
@@ -151,10 +151,10 @@ function ClientRow({
 
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent: string }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-      <div className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</div>
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={`mt-1 text-lg font-bold ${accent}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-[10px] text-zinc-600">{sub}</div>}
+      {sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div>}
     </div>
   );
 }
@@ -174,11 +174,11 @@ function ClientDetail({ orgId }: { orgId: number }) {
   if (summary.isLoading) {
     return (
       <div className="space-y-4">
-        <div className="h-8 w-64 animate-pulse rounded bg-zinc-800/60" />
+        <div className="h-8 w-64 animate-pulse rounded bg-muted/60" />
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-zinc-900" />)}
+          {[0, 1, 2, 3].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-card" />)}
         </div>
-        <div className="h-48 animate-pulse rounded-lg bg-zinc-900" />
+        <div className="h-48 animate-pulse rounded-lg bg-card" />
       </div>
     );
   }
@@ -196,12 +196,12 @@ function ClientDetail({ orgId }: { orgId: number }) {
       {/* Header */}
       <div>
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-zinc-100">{s.organization.display_name}</h2>
-          <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] uppercase tracking-wider text-zinc-400">
+          <h2 className="text-lg font-semibold text-foreground">{s.organization.display_name}</h2>
+          <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
             {s.organization.legal_structure}
           </span>
         </div>
-        <p className="mt-0.5 text-xs text-zinc-500">
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Tax ID {s.organization.tax_id} · KYC {s.organization.kyc_status} · Period {fmtDate(s.period.start)} – {fmtDate(s.period.end)}
         </p>
       </div>
@@ -211,73 +211,73 @@ function ClientDetail({ orgId }: { orgId: number }) {
         <StatCard label="VAT collected" value={formatILS(s.vat.collected_minor_units, { minorUnits: true })} sub={`${s.vat.rate_pct}% rate`} accent="text-emerald-400" />
         <StatCard label="VAT paid" value={formatILS(s.vat.paid_minor_units, { minorUnits: true })} sub="Input VAT" accent="text-blue-400" />
         <StatCard label="VAT due" value={formatILS(s.vat.due_minor_units, { minorUnits: true })} sub="Output − input" accent="text-amber-400" />
-        <StatCard label="Review queue" value={String(s.review_queue_count)} sub="Receipts to review" accent={s.review_queue_count > 0 ? "text-amber-400" : "text-zinc-300"} />
+        <StatCard label="Review queue" value={String(s.review_queue_count)} sub="Receipts to review" accent={s.review_queue_count > 0 ? "text-amber-400" : "text-foreground"} />
       </div>
 
       {/* P&L + expenses-by-category */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-border bg-card">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-zinc-200">Income vs expenses</CardTitle>
+              <CardTitle className="text-sm font-semibold text-foreground">Income vs expenses</CardTitle>
               <TrendingUp className="h-4 w-4 text-emerald-400" />
             </div>
-            <CardDescription className="text-xs text-zinc-500">
+            <CardDescription className="text-xs text-muted-foreground">
               {s.income.invoice_count} invoices · {formatILS(incomeILS)} in · {formatILS(expenseILS)} out
             </CardDescription>
           </CardHeader>
           <CardContent>
             {incomeILS === 0 && expenseILS === 0 ? (
-              <p className="py-12 text-center text-sm text-zinc-600">No income or expenses this period.</p>
+              <p className="py-12 text-center text-sm text-muted-foreground">No income or expenses this period.</p>
             ) : (
               <IncomeExpenseChart incomeILS={incomeILS} expenseILS={expenseILS} />
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900">
+        <Card className="border-border bg-card">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-zinc-200">Expenses by category</CardTitle>
+              <CardTitle className="text-sm font-semibold text-foreground">Expenses by category</CardTitle>
               <ReceiptText className="h-4 w-4 text-fuchsia-400" />
             </div>
-            <CardDescription className="text-xs text-zinc-500">This period</CardDescription>
+            <CardDescription className="text-xs text-muted-foreground">This period</CardDescription>
           </CardHeader>
           <CardContent>
             {hasExpenses ? (
               <ExpenseCategoryChart categories={s.expenses.by_category} />
             ) : (
-              <p className="py-12 text-center text-sm text-zinc-600">No categorised expenses this period.</p>
+              <p className="py-12 text-center text-sm text-muted-foreground">No categorised expenses this period.</p>
             )}
           </CardContent>
         </Card>
       </div>
 
       {/* Exports */}
-      <Card className="border-zinc-800 bg-zinc-900">
+      <Card className="border-border bg-card">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold text-zinc-200">Exports</CardTitle>
+            <CardTitle className="text-sm font-semibold text-foreground">Exports</CardTitle>
             <Inbox className="h-4 w-4 text-indigo-400" />
           </div>
-          <CardDescription className="text-xs text-zinc-500">Uniform-file / Hashavshevet history</CardDescription>
+          <CardDescription className="text-xs text-muted-foreground">Uniform-file / Hashavshevet history</CardDescription>
         </CardHeader>
         <CardContent>
           {exports.isLoading ? (
-            <div className="h-16 animate-pulse rounded-lg bg-zinc-800/40" />
+            <div className="h-16 animate-pulse rounded-lg bg-muted/40" />
           ) : exports.isError ? (
             <p className="text-[11px] text-amber-400/80">Couldn&apos;t load exports.</p>
           ) : (exports.data?.items.length ?? 0) === 0 ? (
-            <p className="text-[11px] text-zinc-600">No exports generated yet.</p>
+            <p className="text-[11px] text-muted-foreground">No exports generated yet.</p>
           ) : (
-            <ul className="divide-y divide-zinc-800">
+            <ul className="divide-y divide-border">
               {exports.data!.items.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                   <div className="min-w-0">
-                    <div className="truncate text-zinc-200">
+                    <div className="truncate text-foreground">
                       {e.format} · {fmtDate(e.period_start)} – {fmtDate(e.period_end)}
                     </div>
-                    <div className="text-[11px] text-zinc-600">
+                    <div className="text-[11px] text-muted-foreground">
                       {e.status}
                       {e.record_count != null ? ` · ${e.record_count} records` : ""}
                       {` · ${fmtDate(e.created_at)}`}
@@ -286,13 +286,13 @@ function ClientDetail({ orgId }: { orgId: number }) {
                   {e.signed_url ? (
                     <a
                       href={e.signed_url}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:border-indigo-500 hover:text-indigo-300 transition-colors"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-foreground hover:border-indigo-500 hover:text-indigo-300 transition-colors"
                     >
                       <Download className="h-3 w-3" />
                       Download
                     </a>
                   ) : (
-                    <span className="shrink-0 text-[11px] text-zinc-600">{e.status}</span>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">{e.status}</span>
                   )}
                 </li>
               ))}

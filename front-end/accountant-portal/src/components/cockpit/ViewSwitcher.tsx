@@ -18,7 +18,7 @@ function Segmented<T extends string>({
   size?: "sm" | "xs";
 }) {
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
+    <div className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -32,7 +32,7 @@ function Segmented<T extends string>({
               size === "sm" ? "px-2.5 py-1 text-xs" : "px-2 py-0.5 text-[11px]",
               active
                 ? "bg-indigo-600/25 text-indigo-200 shadow-inner"
-                : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100",
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
             {opt.icon}

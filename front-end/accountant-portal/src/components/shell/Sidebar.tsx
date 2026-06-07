@@ -8,6 +8,7 @@ import {
   Archive,
   Users,
   MonitorSmartphone,
+  Settings,
   LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/vault",   label: "Document Vault",  icon: Archive },
   { href: "/clients", label: "Clients",   icon: Users },
   { href: "/devices", label: "Devices",   icon: MonitorSmartphone },
+  { href: "/settings", label: "Settings", icon: Settings },
 ] as const
 
 export function Sidebar() {
@@ -28,15 +30,15 @@ export function Sidebar() {
   const { signOut } = useAuth()
 
   return (
-    <aside className="flex h-full w-56 flex-col border-r border-zinc-800 bg-zinc-950">
+    <aside className="flex h-full w-56 flex-col border-r border-border bg-background">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-zinc-800">
+      <div className="flex items-center gap-3 px-4 py-5 border-b border-border">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-lg shadow-indigo-500/20 shrink-0">
           <span className="text-sm font-bold text-white">A</span>
         </div>
         <div className="leading-tight">
-          <p className="text-sm font-semibold text-zinc-100">Aurora LTS</p>
-          <p className="text-[10px] text-zinc-500">Accountant Portal</p>
+          <p className="text-sm font-semibold text-foreground">Aurora LTS</p>
+          <p className="text-[10px] text-muted-foreground">Accountant Portal</p>
         </div>
       </div>
 
@@ -52,7 +54,7 @@ export function Sidebar() {
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 active
                   ? "bg-indigo-600/20 text-indigo-300"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",
+                  : "text-muted-foreground hover:bg-card hover:text-foreground",
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -63,10 +65,10 @@ export function Sidebar() {
       </nav>
 
       {/* Sign out */}
-      <div className="px-2 py-3 border-t border-zinc-800">
+      <div className="px-2 py-3 border-t border-border">
         <button
           onClick={() => signOut()}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-500 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-card hover:text-foreground transition-colors"
         >
           <LogOut className="h-4 w-4 shrink-0" />
           Sign out

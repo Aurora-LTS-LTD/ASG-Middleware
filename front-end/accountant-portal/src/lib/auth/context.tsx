@@ -27,7 +27,7 @@ import {
   useState,
 } from "react";
 import { api, AuthFatalError } from "@/lib/api/client";
-import { keychainGet, keychainClearAll, getDeviceFingerprint, getPlatform } from "@/lib/tauri/keychain";
+import { keychainGet, keychainSet, keychainClearAll, getDeviceFingerprint, getPlatform } from "@/lib/tauri/keychain";
 import { KEYCHAIN_KEYS } from "@/types/api";
 import type { AccountantUser, OtpVerifyResponse } from "@/types/api";
 
@@ -69,6 +69,9 @@ export interface AuthApi {
 
   /** Complete a password reset with the emailed code + a new password. */
   resetPassword: (args: { email: string; code: string; new_password: string }) => Promise<void>;
+
+  /** Update the signed-in accountant's profile (name / firm); refreshes state. */
+  updateProfile: (req: { name?: string; firm_name?: string }) => Promise<AccountantUser>;
 
   signOut: () => Promise<void>;
 }
@@ -261,6 +264,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const updateProfile = useCallback(
+    async (req: { name?: string; firm_name?: string }) => {
+      const updated = await api.updateProfile(req);
+      setState((s) => (s.user ? { ...s, user: updated } : s));
+      // Keep the keychain name in sync so a cold-start bootstrap shows it.
+      await keychainSet(KEYCHAIN_KEYS.userName, updated.name).catch(() => undefined);
+      return updated;
+    },
+    [],
+  );
+
   const signOut = useCallback(async () => {
     try {
       await api.logout();
@@ -307,9 +321,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loginWithPassword,
       requestPasswordReset,
       resetPassword,
+      updateProfile,
       signOut,
     }),
-    [state, requestOtp, verifyOtp, loginWithPassword, requestPasswordReset, resetPassword, signOut],
+    [state, requestOtp, verifyOtp, loginWithPassword, requestPasswordReset, resetPassword, updateProfile, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

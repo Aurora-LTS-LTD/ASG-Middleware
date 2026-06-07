@@ -16,7 +16,7 @@ const CONFIG: Record<UploadVector, { label: string; icon: React.ElementType; cla
   manual: {
     label: "Manual",
     icon: Monitor,
-    className: "bg-zinc-700/50 text-zinc-400 border-zinc-700",
+    className: "bg-muted/50 text-muted-foreground border-border",
   },
 }
 

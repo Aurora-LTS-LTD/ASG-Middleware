@@ -27,8 +27,8 @@ export function LocaleSwitcher() {
       title={`Language: ${LOCALE_LABELS[locale]} — click to switch`}
       className="
         flex items-center gap-1.5 rounded-md px-2 py-1
-        text-zinc-400 hover:text-zinc-100
-        hover:bg-zinc-800 transition-colors
+        text-muted-foreground hover:text-foreground
+        hover:bg-muted transition-colors
         text-xs font-medium
       "
       aria-label={`Current language: ${LOCALE_LABELS[locale]}. Click to switch.`}

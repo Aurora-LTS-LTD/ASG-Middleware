@@ -161,11 +161,11 @@ function LoginView() {
           : "Enter the verification code";
 
   const inputClass =
-    "bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-indigo-500";
+    "bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-indigo-500";
 
   return (
     <Centered>
-      <Card className="w-[420px] bg-zinc-900 border-zinc-800 text-zinc-100 shadow-2xl shadow-black/50">
+      <Card className="w-[420px] bg-card border-border text-foreground shadow-2xl shadow-black/50">
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-center mb-6">
             <div className="h-12 w-12 bg-indigo-500 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -175,7 +175,7 @@ function LoginView() {
           <CardTitle className="text-2xl text-center font-semibold tracking-tight">
             Aurora LTS Portal
           </CardTitle>
-          <CardDescription className="text-center text-zinc-400">
+          <CardDescription className="text-center text-muted-foreground">
             {description}
           </CardDescription>
         </CardHeader>
@@ -190,7 +190,7 @@ function LoginView() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-300">Work Email</FormLabel>
+                      <FormLabel className="text-foreground">Work Email</FormLabel>
                       <FormControl>
                         <Input placeholder="accountant@agency.com" autoComplete="email" {...field} className={inputClass} />
                       </FormControl>
@@ -203,7 +203,7 @@ function LoginView() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-300">Password</FormLabel>
+                      <FormLabel className="text-foreground">Password</FormLabel>
                       <FormControl>
                         <Input type="password" placeholder="••••••••" autoComplete="current-password" {...field} className={inputClass} />
                       </FormControl>
@@ -222,7 +222,7 @@ function LoginView() {
                   <button
                     type="button"
                     onClick={() => { setMode("otp"); setStep("email"); setError(null); }}
-                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Sign in with email code
                   </button>
@@ -242,7 +242,7 @@ function LoginView() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-300">Work Email</FormLabel>
+                      <FormLabel className="text-foreground">Work Email</FormLabel>
                       <FormControl>
                         <Input placeholder="accountant@agency.com" autoComplete="email" {...field} className={inputClass} />
                       </FormControl>
@@ -261,7 +261,7 @@ function LoginView() {
                   <button
                     type="button"
                     onClick={() => { setMode("password"); setError(null); }}
-                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Use password instead
                   </button>
@@ -278,7 +278,7 @@ function LoginView() {
                   name="otp"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-300">Security Code</FormLabel>
+                      <FormLabel className="text-foreground">Security Code</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="000000"
@@ -286,7 +286,7 @@ function LoginView() {
                           inputMode="numeric"
                           autoComplete="one-time-code"
                           {...field}
-                          className="bg-zinc-950 border-zinc-800 text-zinc-100 text-center tracking-widest text-lg font-mono focus-visible:ring-indigo-500"
+                          className="bg-background border-border text-foreground text-center tracking-widest text-lg font-mono focus-visible:ring-indigo-500"
                         />
                       </FormControl>
                       <FormMessage className="text-red-400" />
@@ -308,7 +308,7 @@ function LoginView() {
                       setError(null);
                       otpForm.reset();
                     }}
-                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Use a different email
                   </button>
@@ -319,7 +319,7 @@ function LoginView() {
         </CardContent>
       </Card>
 
-      <div className="mt-8 text-xs text-zinc-600 flex items-center gap-2">
+      <div className="mt-8 text-xs text-muted-foreground flex items-center gap-2">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="12"
@@ -353,7 +353,7 @@ function SignedInView() {
 
   return (
     <Centered>
-      <Card className="w-[480px] bg-zinc-900 border-zinc-800 text-zinc-100 shadow-2xl shadow-black/50">
+      <Card className="w-[480px] bg-card border-border text-foreground shadow-2xl shadow-black/50">
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 bg-emerald-500/20 border border-emerald-500/40 rounded-lg flex items-center justify-center">
@@ -376,7 +376,7 @@ function SignedInView() {
               <CardTitle className="text-lg font-semibold tracking-tight">
                 Signed in
               </CardTitle>
-              <CardDescription className="text-zinc-400 mt-0.5 text-sm">
+              <CardDescription className="text-muted-foreground mt-0.5 text-sm">
                 {user?.email}
               </CardDescription>
             </div>
@@ -388,7 +388,7 @@ function SignedInView() {
               <div className="text-xs uppercase tracking-wider text-amber-400 mb-1">
                 New device detected
               </div>
-              <div className="text-sm text-zinc-300">
+              <div className="text-sm text-foreground">
                 We&apos;ve emailed you about this sign-in. Review or revoke
                 bound devices anytime from the security panel.
               </div>
@@ -396,40 +396,40 @@ function SignedInView() {
           )}
 
           <dl className="grid grid-cols-3 gap-3 text-sm">
-            <div className="col-span-1 text-zinc-500">Name</div>
-            <div className="col-span-2 text-zinc-200">{user?.name || "—"}</div>
+            <div className="col-span-1 text-muted-foreground">Name</div>
+            <div className="col-span-2 text-foreground">{user?.name || "—"}</div>
 
             {user?.firm_name && (
               <>
-                <div className="col-span-1 text-zinc-500">Firm</div>
-                <div className="col-span-2 text-zinc-200">{user.firm_name}</div>
+                <div className="col-span-1 text-muted-foreground">Firm</div>
+                <div className="col-span-2 text-foreground">{user.firm_name}</div>
               </>
             )}
 
-            <div className="col-span-1 text-zinc-500">Role</div>
-            <div className="col-span-2 text-zinc-200 font-mono text-xs uppercase tracking-wider">
+            <div className="col-span-1 text-muted-foreground">Role</div>
+            <div className="col-span-2 text-foreground font-mono text-xs uppercase tracking-wider">
               {user?.role}
             </div>
 
-            <div className="col-span-1 text-zinc-500">Device</div>
-            <div className="col-span-2 text-zinc-200 font-mono text-xs">
+            <div className="col-span-1 text-muted-foreground">Device</div>
+            <div className="col-span-2 text-foreground font-mono text-xs">
               #{deviceId}
             </div>
 
-            <div className="col-span-1 text-zinc-500">Runtime</div>
-            <div className="col-span-2 text-zinc-200 font-mono text-xs">
+            <div className="col-span-1 text-muted-foreground">Runtime</div>
+            <div className="col-span-2 text-foreground font-mono text-xs">
               {isTauriRuntime() ? "Tauri native shell" : "Browser preview"}
             </div>
           </dl>
 
-          <div className="border-t border-zinc-800 pt-4">
-            <div className="text-xs text-zinc-500 mb-3">
+          <div className="border-t border-border pt-4">
+            <div className="text-xs text-muted-foreground mb-3">
               Phase 2 stub. The Phase 3 dashboard (client list, pending tasks,
               metrics) will replace this view.
             </div>
             <Button
               variant="outline"
-              className="w-full border-zinc-700 bg-zinc-950 hover:bg-zinc-800 text-zinc-100"
+              className="w-full border-border bg-background hover:bg-muted text-foreground"
               onClick={async () => {
                 setSigningOut(true);
                 try {
@@ -455,7 +455,7 @@ function SignedInView() {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6 sm:p-12 bg-zinc-950">
+    <main className="flex min-h-screen flex-col items-center justify-center p-6 sm:p-12 bg-background">
       {children}
     </main>
   );
@@ -463,7 +463,7 @@ function Centered({ children }: { children: React.ReactNode }) {
 
 function InitializingPulse() {
   return (
-    <div className="flex items-center gap-2 text-zinc-500 text-sm">
+    <div className="flex items-center gap-2 text-muted-foreground text-sm">
       <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
       Initializing secure session…
     </div>
@@ -495,7 +495,7 @@ function InlineError({
         <div className="flex-1 leading-snug">{error.message}</div>
         <button
           onClick={onDismiss}
-          className="text-zinc-500 hover:text-zinc-300 text-xs"
+          className="text-muted-foreground hover:text-foreground text-xs"
           aria-label="Dismiss"
         >
           ✕
