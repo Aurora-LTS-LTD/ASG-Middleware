@@ -4,8 +4,11 @@ import { useQuery } from "@tanstack/react-query"
 import { Topbar } from "@/components/shell/Topbar"
 import { useAuth } from "@/lib/auth/context"
 import { api } from "@/lib/api/client"
-import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card"
-import { Archive, MonitorSmartphone, Users, ShieldCheck, AlertTriangle, ShieldAlert } from "lucide-react"
+import { m1Key } from "@/lib/api/queryKeys"
+import { EarningsTrendChart } from "@/components/charts/FinanceCharts"
+import { formatILS } from "@/lib/format/currency"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Archive, MonitorSmartphone, Users, ShieldCheck, AlertTriangle, ShieldAlert, TrendingUp } from "lucide-react"
 import { type LucideIcon } from "lucide-react"
 
 type SecurityStatus = "ok" | "warning" | "critical"
@@ -39,6 +42,17 @@ export default function DashboardPage() {
     refetchOnWindowFocus: true,
     staleTime: 30_000,
   })
+
+  // Revenue-share earnings (12-month trend chart). Independent of KPIs so a
+  // slow/empty earnings response never blocks the hero cards.
+  const earnings = useQuery({
+    queryKey: m1Key("dashboard", "earnings"),
+    queryFn: () => api.getEarnings(),
+    staleTime: 60_000,
+  })
+  const hasEarnings = (earnings.data?.periods_last_12 ?? []).some(
+    (p) => p.total_amount_minor_units > 0,
+  )
 
   const placeholder = isLoading ? "…" : isError ? "—" : null
   const security = securityValueAndIcon(data?.security_status)
@@ -110,6 +124,39 @@ export default function DashboardPage() {
             connection recovers.
           </div>
         )}
+
+        <div className="mt-6">
+          <Card className="border-zinc-800 bg-zinc-900">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold text-zinc-200">
+                  Earnings — last 12 months
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-indigo-400" />
+              </div>
+              <CardDescription className="text-xs text-zinc-500">
+                {earnings.data
+                  ? `Lifetime paid ${formatILS(earnings.data.lifetime_total_paid_minor_units, { minorUnits: true })}`
+                  : "Revenue-share accruals"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {earnings.isLoading ? (
+                <div className="h-[200px] animate-pulse rounded-lg bg-zinc-800/40" />
+              ) : earnings.isError ? (
+                <p className="py-16 text-center text-sm text-amber-400/80">
+                  Earnings service unreachable — retry shortly.
+                </p>
+              ) : hasEarnings ? (
+                <EarningsTrendChart periods={earnings.data!.periods_last_12} />
+              ) : (
+                <p className="py-16 text-center text-sm text-zinc-600">
+                  No earnings recorded yet. Your revenue-share accruals will appear here.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </>
   )
