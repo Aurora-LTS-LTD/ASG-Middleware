@@ -1,0 +1,105 @@
+{
+  "locale": "en",
+  "dir": "ltr",
+
+  "nav": {
+    "dashboard": "Dashboard",
+    "vault": "Document Vault",
+    "clients": "Clients",
+    "devices": "Devices",
+    "signOut": "Sign out"
+  },
+
+  "auth": {
+    "title": "Aurora LTS",
+    "subtitle": "Accountant Portal",
+    "emailLabel": "Email address",
+    "emailPlaceholder": "you@yourfirm.com",
+    "sendOtpButton": "Send one-time code",
+    "sendingOtp": "Sending…",
+    "otpLabel": "One-time code",
+    "otpPlaceholder": "6-digit code",
+    "deviceLabel": "Device name (optional)",
+    "devicePlaceholder": "My MacBook",
+    "verifyButton": "Sign in",
+    "verifying": "Verifying…",
+    "backToEmail": "← Back",
+    "otpSentNotice": "A code was sent to {email}. Valid for 60 seconds.",
+    "errors": {
+      "emailRequired": "Email is required",
+      "invalidEmail": "Enter a valid email address",
+      "otpRequired": "Enter the 6-digit code",
+      "otpInvalid": "Invalid code — {remaining} attempt(s) remaining",
+      "otpExpired": "Code expired — request a new one",
+      "rateLimited": "Too many attempts. Try again in {seconds}s",
+      "deviceRevoked": "This device has been revoked. Contact your administrator.",
+      "generic": "Something went wrong. Please try again."
+    }
+  },
+
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Your practice at a glance",
+    "kpi": {
+      "vaultDocsThisMonth": "Vault docs this month",
+      "activeClients": "Active clients",
+      "activeDevices": "Active devices",
+      "securityStatus": "Security status"
+    },
+    "securityStatus": {
+      "ok": "All clear",
+      "warning": "Review required",
+      "critical": "Action needed"
+    }
+  },
+
+  "vault": {
+    "title": "Document Vault",
+    "subtitle": "Encrypted documents for all your clients",
+    "uploadButton": "Upload document",
+    "noDocuments": "No documents yet",
+    "noDocumentsHint": "Upload a document or share your ingestion address with clients.",
+    "columns": {
+      "name": "File name",
+      "client": "Client",
+      "type": "Type",
+      "status": "Status",
+      "date": "Date"
+    },
+    "status": {
+      "pending_review": "Pending review",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "pending_upload": "Uploading"
+    }
+  },
+
+  "clients": {
+    "title": "Clients",
+    "subtitle": "Organisations you manage",
+    "noClients": "No clients yet",
+    "noClientsHint": "Clients appear here once they complete onboarding."
+  },
+
+  "devices": {
+    "title": "My Devices",
+    "subtitle": "Sessions bound to your account",
+    "thisDevice": "This device",
+    "revoke": "Revoke",
+    "relabel": "Rename",
+    "confirmRevoke": "Revoke this device?",
+    "confirmRevokeMessage": "This will immediately end the session on \"{label}\".",
+    "cancel": "Cancel",
+    "save": "Save",
+    "noDevices": "No devices enrolled"
+  },
+
+  "common": {
+    "loading": "Loading…",
+    "retry": "Retry",
+    "error": "Something went wrong",
+    "unknown": "Unknown",
+    "today": "Today",
+    "yesterday": "Yesterday"
+  }
+}

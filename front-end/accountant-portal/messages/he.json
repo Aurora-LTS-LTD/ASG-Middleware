@@ -1,0 +1,105 @@
+{
+  "locale": "he",
+  "dir": "rtl",
+
+  "nav": {
+    "dashboard": "לוח בקרה",
+    "vault": "כספת מסמכים",
+    "clients": "לקוחות",
+    "devices": "מכשירים",
+    "signOut": "התנתק"
+  },
+
+  "auth": {
+    "title": "Aurora LTS",
+    "subtitle": "פורטל רואי חשבון",
+    "emailLabel": "כתובת אימייל",
+    "emailPlaceholder": "you@yourfirm.co.il",
+    "sendOtpButton": "שלח קוד חד-פעמי",
+    "sendingOtp": "שולח…",
+    "otpLabel": "קוד חד-פעמי",
+    "otpPlaceholder": "קוד בן 6 ספרות",
+    "deviceLabel": "שם המכשיר (אופציונלי)",
+    "devicePlaceholder": "המחשב שלי",
+    "verifyButton": "כניסה",
+    "verifying": "מאמת…",
+    "backToEmail": "← חזרה",
+    "otpSentNotice": "קוד נשלח לכתובת {email}. תקף ל-60 שניות.",
+    "errors": {
+      "emailRequired": "נדרשת כתובת אימייל",
+      "invalidEmail": "הכנס כתובת אימייל תקינה",
+      "otpRequired": "הכנס את הקוד בן 6 הספרות",
+      "otpInvalid": "קוד שגוי — נותרו {remaining} ניסיון/ות",
+      "otpExpired": "הקוד פג תוקף — בקש קוד חדש",
+      "rateLimited": "יותר מדי ניסיונות. נסה שוב בעוד {seconds} שניות",
+      "deviceRevoked": "מכשיר זה בוטל. פנה למנהל המערכת.",
+      "generic": "אירעה שגיאה. אנא נסה שוב."
+    }
+  },
+
+  "dashboard": {
+    "title": "לוח בקרה",
+    "subtitle": "סקירת המשרד שלך",
+    "kpi": {
+      "vaultDocsThisMonth": "מסמכים החודש",
+      "activeClients": "לקוחות פעילים",
+      "activeDevices": "מכשירים פעילים",
+      "securityStatus": "סטטוס אבטחה"
+    },
+    "securityStatus": {
+      "ok": "הכל תקין",
+      "warning": "נדרשת בדיקה",
+      "critical": "נדרשת פעולה"
+    }
+  },
+
+  "vault": {
+    "title": "כספת מסמכים",
+    "subtitle": "מסמכים מוצפנים עבור כל לקוחותיך",
+    "uploadButton": "העלאת מסמך",
+    "noDocuments": "אין מסמכים עדיין",
+    "noDocumentsHint": "העלה מסמך או שתף את כתובת הקבלה שלך עם הלקוחות.",
+    "columns": {
+      "name": "שם הקובץ",
+      "client": "לקוח",
+      "type": "סוג",
+      "status": "סטטוס",
+      "date": "תאריך"
+    },
+    "status": {
+      "pending_review": "ממתין לבדיקה",
+      "approved": "אושר",
+      "rejected": "נדחה",
+      "pending_upload": "מעלה"
+    }
+  },
+
+  "clients": {
+    "title": "לקוחות",
+    "subtitle": "ארגונים שאתה מנהל",
+    "noClients": "אין לקוחות עדיין",
+    "noClientsHint": "לקוחות יופיעו כאן לאחר השלמת תהליך ההצטרפות."
+  },
+
+  "devices": {
+    "title": "המכשירים שלי",
+    "subtitle": "חיבורים המקושרים לחשבונך",
+    "thisDevice": "מכשיר זה",
+    "revoke": "ביטול",
+    "relabel": "שינוי שם",
+    "confirmRevoke": "לבטל את המכשיר?",
+    "confirmRevokeMessage": "פעולה זו תסיים מיידית את הסשן ב\"{label}\".",
+    "cancel": "ביטול",
+    "save": "שמור",
+    "noDevices": "אין מכשירים רשומים"
+  },
+
+  "common": {
+    "loading": "טוען…",
+    "retry": "נסה שוב",
+    "error": "אירעה שגיאה",
+    "unknown": "לא ידוע",
+    "today": "היום",
+    "yesterday": "אתמול"
+  }
+}

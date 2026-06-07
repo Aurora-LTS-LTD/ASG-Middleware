@@ -1,0 +1,105 @@
+{
+  "locale": "ar",
+  "dir": "rtl",
+
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "vault": "خزنة المستندات",
+    "clients": "العملاء",
+    "devices": "الأجهزة",
+    "signOut": "تسجيل الخروج"
+  },
+
+  "auth": {
+    "title": "Aurora LTS",
+    "subtitle": "بوابة المحاسبين",
+    "emailLabel": "عنوان البريد الإلكتروني",
+    "emailPlaceholder": "you@yourfirm.com",
+    "sendOtpButton": "إرسال الرمز المؤقت",
+    "sendingOtp": "جارٍ الإرسال…",
+    "otpLabel": "الرمز المؤقت",
+    "otpPlaceholder": "رمز مؤلف من 6 أرقام",
+    "deviceLabel": "اسم الجهاز (اختياري)",
+    "devicePlaceholder": "جهاز الكمبيوتر الخاص بي",
+    "verifyButton": "تسجيل الدخول",
+    "verifying": "جارٍ التحقق…",
+    "backToEmail": "→ رجوع",
+    "otpSentNotice": "تم إرسال رمز إلى {email}. صالح لمدة 60 ثانية.",
+    "errors": {
+      "emailRequired": "البريد الإلكتروني مطلوب",
+      "invalidEmail": "أدخل عنوان بريد إلكتروني صحيح",
+      "otpRequired": "أدخل الرمز المؤلف من 6 أرقام",
+      "otpInvalid": "رمز غير صحيح — {remaining} محاولة/محاولات متبقية",
+      "otpExpired": "انتهت صلاحية الرمز — اطلب رمزاً جديداً",
+      "rateLimited": "محاولات كثيرة جداً. حاول مرة أخرى خلال {seconds} ثانية",
+      "deviceRevoked": "تم إلغاء هذا الجهاز. اتصل بالمسؤول.",
+      "generic": "حدث خطأ ما. يُرجى المحاولة مرة أخرى."
+    }
+  },
+
+  "dashboard": {
+    "title": "لوحة التحكم",
+    "subtitle": "نظرة عامة على مكتبك",
+    "kpi": {
+      "vaultDocsThisMonth": "مستندات هذا الشهر",
+      "activeClients": "العملاء النشطون",
+      "activeDevices": "الأجهزة النشطة",
+      "securityStatus": "حالة الأمان"
+    },
+    "securityStatus": {
+      "ok": "كل شيء على ما يرام",
+      "warning": "يلزم مراجعة",
+      "critical": "مطلوب إجراء"
+    }
+  },
+
+  "vault": {
+    "title": "خزنة المستندات",
+    "subtitle": "مستندات مشفرة لجميع عملائك",
+    "uploadButton": "رفع مستند",
+    "noDocuments": "لا توجد مستندات بعد",
+    "noDocumentsHint": "ارفع مستنداً أو شارك عنوان الاستقبال الخاص بك مع العملاء.",
+    "columns": {
+      "name": "اسم الملف",
+      "client": "العميل",
+      "type": "النوع",
+      "status": "الحالة",
+      "date": "التاريخ"
+    },
+    "status": {
+      "pending_review": "قيد المراجعة",
+      "approved": "تمت الموافقة",
+      "rejected": "مرفوض",
+      "pending_upload": "جارٍ الرفع"
+    }
+  },
+
+  "clients": {
+    "title": "العملاء",
+    "subtitle": "المنظمات التي تديرها",
+    "noClients": "لا يوجد عملاء بعد",
+    "noClientsHint": "سيظهر العملاء هنا بعد إتمام عملية التسجيل."
+  },
+
+  "devices": {
+    "title": "أجهزتي",
+    "subtitle": "الجلسات المرتبطة بحسابك",
+    "thisDevice": "هذا الجهاز",
+    "revoke": "إلغاء",
+    "relabel": "إعادة تسمية",
+    "confirmRevoke": "إلغاء الجهاز؟",
+    "confirmRevokeMessage": "سيؤدي هذا إلى إنهاء الجلسة على \"{label}\" فوراً.",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "noDevices": "لا توجد أجهزة مسجلة"
+  },
+
+  "common": {
+    "loading": "جارٍ التحميل…",
+    "retry": "إعادة المحاولة",
+    "error": "حدث خطأ ما",
+    "unknown": "غير معروف",
+    "today": "اليوم",
+    "yesterday": "أمس"
+  }
+}
