@@ -35,6 +35,10 @@ import type {
   ForgotPasswordResponse,
   ResetPasswordRequest,
   OkResponse,
+  AccountantBook,
+  OrgSummary,
+  Earnings,
+  ExportsList,
   RefreshResponse,
   LogoutRequest,
   LogoutResponse,
@@ -411,6 +415,28 @@ export const api = {
       body: req,
       authRequired: true,
     });
+  },
+
+  // ── Accountant data (Phase 2 — dashboard + clients, all M1) ──
+
+  /** Per-engaged-org grid: invoice_count, outstanding, review-queue, last activity. */
+  async getAccountantBook(): Promise<AccountantBook> {
+    return call<AccountantBook>("/api/v1/accountant/book", { authRequired: true });
+  },
+
+  /** This-month P&L + expenses-by-category + VAT for one client org. */
+  async getOrgSummary(orgId: number): Promise<OrgSummary> {
+    return call<OrgSummary>(`/api/v1/accountant/orgs/${orgId}/summary`, { authRequired: true });
+  },
+
+  /** Export history (uniform_file / hashavshevet) for one client org. */
+  async getOrgExports(orgId: number): Promise<ExportsList> {
+    return call<ExportsList>(`/api/v1/accountant/orgs/${orgId}/exports`, { authRequired: true });
+  },
+
+  /** Accountant revenue-share earnings, incl. last-12-months trend. */
+  async getEarnings(): Promise<Earnings> {
+    return call<Earnings>("/api/v1/accountant/earnings", { authRequired: true });
   },
 
   /** Manual refresh — usually unneeded, the client refreshes proactively. */
