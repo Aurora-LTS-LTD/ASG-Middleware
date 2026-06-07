@@ -39,6 +39,28 @@ steps:
       - --label=build.id=${BUILD_ID}
       - .
 
+  # ── 1b. Lifespan boot-gate (M2): run + await the FastAPI startup lifespan via
+  #        TestClient so a broken startup fails the build BEFORE the image is pushed.
+  #        Dev mode (AURORA_RUNTIME=) -> backend_check WARNs; no real secrets in CI.
+  - id: lifespan-gate
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --env=AURORA_RUNTIME=
+      - --env=DATABASE_URL=sqlite:///./verify.db
+      - --env=SKIP_SEED_ADMIN=1
+      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_IMAGE}:${_VERSION}
+      - python
+      - -c
+      - |
+        from fastapi.testclient import TestClient
+        import app.main_core
+        with TestClient(app.main_core.app) as c:
+            r = c.get("/api/v1/core/health")
+            assert r.status_code == 200, f"core/health returned {r.status_code}"
+        print("LIFESPAN-GATE OK: M2 startup lifespan ran; /core/health = 200")
+
   # ── 2. Push both tags to Artifact Registry ──
   - id: docker-push-versioned
     name: gcr.io/cloud-builders/docker
