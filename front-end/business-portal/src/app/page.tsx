@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -130,6 +131,12 @@ function LoginView() {
               </Button>
             </form>
           </Form>
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            New to Aurora?{" "}
+            <Link href="/signup" className="font-medium text-indigo-400 hover:text-indigo-300">
+              Create an account
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </Centered>
