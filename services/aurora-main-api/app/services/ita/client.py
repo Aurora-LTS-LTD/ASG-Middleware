@@ -172,6 +172,7 @@ async def _production_call(
             http_status=None,
             latency_ms=0,
             backend="production",
+            error_code="signing_error",
         )
         _write_audit_row(
             invoice_id=invoice_id,
@@ -222,6 +223,7 @@ async def _production_call(
             http_status=None,
             latency_ms=latency_ms,
             backend="production",
+            error_code="transport_error",
         )
         _write_audit_row(
             invoice_id=invoice_id,
@@ -268,6 +270,7 @@ async def _production_call(
                 http_status=http_status,
                 latency_ms=latency_ms,
                 backend="production",
+                error_code="missing_allocation_number",
             )
         _write_audit_row(
             invoice_id=invoice_id,
@@ -280,15 +283,26 @@ async def _production_call(
         )
         return result
 
-    # 4xx / 5xx — log and surface as failure. allocation_queue's retry
-    # logic decides whether to back off (5xx) or give up (4xx).
+    # 4xx / 5xx — surface as failure with a retryability verdict the queue
+    # honours: 429 (rate-limit) + 5xx (server/outage) are transient → retry;
+    # other 4xx (bad tax id, malformed request) are permanent → give up fast.
     err_summary = _summarise_response_text(response.text)
+    retryable = (http_status == 429) or (http_status >= 500)
+    error_code = f"http_{http_status}"
+    try:
+        err_json = response.json()
+        if isinstance(err_json, dict):
+            error_code = str(err_json.get("error") or err_json.get("code") or error_code)
+    except Exception:
+        pass
     result = _failure_result(
         message=f"HTTP {http_status}: {err_summary[:200]}",
         request_id=request_id,
         http_status=http_status,
         latency_ms=latency_ms,
         backend="production",
+        retryable=retryable,
+        error_code=error_code,
     )
     _write_audit_row(
         invoice_id=invoice_id,
@@ -307,7 +321,7 @@ async def _production_call(
 # ─────────────────────────────────────────────────────────────
 def _failure_result(
     *, message: str, request_id: str, http_status: Optional[int],
-    latency_ms: int, backend: str,
+    latency_ms: int, backend: str, retryable: bool = True, error_code: str = "ita_error",
 ) -> dict:
     return {
         "success": False,
@@ -318,6 +332,10 @@ def _failure_result(
         "http_status": http_status,
         "latency_ms": latency_ms,
         "backend": backend,
+        # Whether the allocation queue should keep retrying. Permanent 4xx
+        # (bad tax id, malformed request) → False; 429 + 5xx + transport → True.
+        "retryable": retryable,
+        "error_code": error_code,
         "raw_response_summary": message[:500],
     }
 
@@ -383,7 +401,7 @@ def _write_audit_row(
             latency_ms=result.get("latency_ms"),
             success=bool(result.get("success")),
             allocation_number=result.get("allocation_number"),
-            error_code=None if result.get("success") else "ita_error",
+            error_code=None if result.get("success") else (result.get("error_code") or "ita_error"),
             error_message=None if result.get("success") else str(result.get("message"))[:500],
             backend=backend,
             response_summary=result.get("raw_response_summary"),
