@@ -1,12 +1,11 @@
 "use client";
 
 /**
- * Business Owner Portal — login + signed-in placeholder.
- *
- * v1 auth: email + password against M1's /api/v1/auth/login. Once signed in,
- * batch 3 replaces the placeholder with the real invoice dashboard.
+ * Business Owner Portal — login ("/").
+ * Signed-out → email+password login. Signed-in → redirect to /dashboard.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -31,19 +30,23 @@ const inputClass =
   "bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-indigo-500";
 
 export default function Home() {
-  const { status, user } = useAuth();
-  if (status === "initializing") {
-    return (
-      <Centered>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-indigo-500" />
-          Loading…
-        </div>
-      </Centered>
-    );
-  }
-  if (status === "signed_in" && user) return <SignedInView />;
-  return <LoginView />;
+  const { status } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "signed_in") router.replace("/dashboard");
+  }, [status, router]);
+
+  if (status === "signed_out") return <LoginView />;
+  // initializing OR signed_in (mid-redirect) → brief spinner
+  return (
+    <Centered>
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="h-2 w-2 animate-pulse rounded-full bg-indigo-500" />
+        Loading…
+      </div>
+    </Centered>
+  );
 }
 
 function LoginView() {
@@ -127,39 +130,6 @@ function LoginView() {
               </Button>
             </form>
           </Form>
-        </CardContent>
-      </Card>
-    </Centered>
-  );
-}
-
-function SignedInView() {
-  const { user, signOut } = useAuth();
-  return (
-    <Centered>
-      <Card className="w-[460px] border-border bg-card text-foreground shadow-2xl shadow-black/30">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold tracking-tight">Signed in</CardTitle>
-          <CardDescription className="text-muted-foreground">{user?.email}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <dl className="grid grid-cols-3 gap-2 text-sm">
-            <dt className="text-muted-foreground">Name</dt>
-            <dd className="col-span-2 text-foreground">{user?.full_name || "—"}</dd>
-            <dt className="text-muted-foreground">Role</dt>
-            <dd className="col-span-2 font-mono text-xs uppercase tracking-wider text-foreground">{user?.role}</dd>
-          </dl>
-          <p className="text-xs text-muted-foreground">
-            Batch 3 replaces this with your invoice dashboard (status KPIs + list);
-            batch 4 adds the per-invoice lifecycle timeline.
-          </p>
-          <Button
-            variant="outline"
-            className="w-full border-border bg-background text-foreground hover:bg-accent"
-            onClick={signOut}
-          >
-            Sign out
-          </Button>
         </CardContent>
       </Card>
     </Centered>
