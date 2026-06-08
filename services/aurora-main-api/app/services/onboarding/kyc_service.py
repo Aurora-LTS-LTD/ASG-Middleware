@@ -87,6 +87,15 @@ def _bucket_name() -> str:
     return os.getenv("GCS_BUCKET_KYC", "asg-kyc-prod")
 
 
+class KycStorageError(Exception):
+    """
+    Raised when the KYC storage backend (GCS) is reachable-but-failing:
+    transport/timeout, permission, or a transient SDK error. The router maps
+    this to HTTP 503 ('storage temporarily unavailable, retry') — distinct from
+    a ValueError (client/config error → 400).
+    """
+
+
 # ─────────────────────────────────────────────────────────────
 # init_document_upload
 # ─────────────────────────────────────────────────────────────
@@ -145,6 +154,25 @@ def init_document_upload(
         f"{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}{extension}"
     )
 
+    # ── Build the upload URL FIRST ──
+    # Generating the signed URL before any DB write means a signing failure
+    # (bad/missing SA key, GCS transport error) does NOT leave an orphaned
+    # pending_upload row. ValueError → actionable 400 (config); any GCS SDK /
+    # transport error → KycStorageError → 503 (retryable).
+    from app.services.gcp.storage import signed_put_url
+    try:
+        upload_url = signed_put_url(
+            bucket=_bucket_name(),
+            object_key=object_key,
+            mime_type=mime_type,
+            max_bytes=bytes_size,
+            ttl_seconds=SIGNED_URL_TTL_SECONDS,
+        )
+    except ValueError:
+        raise  # missing/malformed creds, unknown backend → 400
+    except Exception as exc:  # noqa: BLE001 — GCS SDK / transport / credential errors
+        raise KycStorageError(f"Could not prepare document upload: {exc}") from exc
+
     # ── Persist the KycDocument row in 'pending_upload' state ──
     doc = KycDocument(
         organization_id=organization_id,
@@ -157,6 +185,7 @@ def init_document_upload(
         status="pending_upload",
     )
     db.add(doc)
+    db.flush()  # assign doc.id (python-side uuid default) so the audit log isn't doc_id=None
 
     db.add(ActionLog(
         business_id=None,
@@ -168,16 +197,6 @@ def init_document_upload(
     ))
     db.commit()
     db.refresh(doc)
-
-    # ── Build the upload URL ──
-    from app.services.gcp.storage import signed_put_url
-    upload_url = signed_put_url(
-        bucket=_bucket_name(),
-        object_key=object_key,
-        mime_type=mime_type,
-        max_bytes=bytes_size,
-        ttl_seconds=SIGNED_URL_TTL_SECONDS,
-    )
 
     return {
         "doc_id": doc.id,
@@ -232,14 +251,18 @@ def finalize_document_upload(
         doc.bytes_size = actual_size
 
     elif backend == "gcs":
-        from google.cloud import storage as gcs_sdk  # lazy import
         from app.services.gcp.storage import _kyc_credentials
 
-        creds = _kyc_credentials()
-        client = gcs_sdk.Client(credentials=creds)
-        blob = client.bucket(doc.gcs_bucket).blob(doc.gcs_object_key)
+        creds = _kyc_credentials()  # ValueError (missing/malformed key) → 400
+        try:
+            from google.cloud import storage as gcs_sdk  # lazy import
+            client = gcs_sdk.Client(credentials=creds)
+            blob = client.bucket(doc.gcs_bucket).blob(doc.gcs_object_key)
+            exists = blob.exists()
+        except Exception as exc:  # noqa: BLE001 — GCS transport/permission/SDK error → 503, not a raw 500
+            raise KycStorageError(f"Could not reach document storage: {exc}") from exc
 
-        if not blob.exists():
+        if not exists:
             raise ValueError(
                 "No bytes received in GCS yet. Did the browser PUT to the signed URL succeed?"
             )
@@ -247,7 +270,16 @@ def finalize_document_upload(
         # Download to compute sha256 server-side (max 10 MB — ~50ms on Cloud Run)
         # SPRINT-9: replace with async Cloud Function trigger on bucket notification
         # to avoid blocking the finalize request on large files.
-        raw = blob.download_as_bytes(timeout=30)
+        try:
+            raw = blob.download_as_bytes(timeout=30)
+        except Exception as exc:  # noqa: BLE001 — GCS transport/timeout/permission error → 503
+            raise KycStorageError(f"Could not read the uploaded document: {exc}") from exc
+
+        # Defense-in-depth: re-enforce the size cap on the actual bytes (the signed
+        # URL constrains this at the network layer, but never trust a single guard).
+        if len(raw) > MAX_BYTES:
+            raise ValueError(f"Uploaded document exceeds the {MAX_BYTES}-byte limit")
+
         doc.sha256 = hashlib.sha256(raw).hexdigest()
         doc.bytes_size = len(raw)
 

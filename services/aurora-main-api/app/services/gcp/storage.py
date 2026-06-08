@@ -226,12 +226,19 @@ def _kyc_credentials():
             "or set KYC_BACKEND=stub for local development."
         )
 
-    # Detect file-path vs. inline JSON
-    if raw.startswith("{"):
-        key_data = json.loads(raw)
-    else:
-        with open(raw) as fh:
-            key_data = json.load(fh)
+    # Detect file-path vs. inline JSON. Surface malformed/unreadable key
+    # material as an actionable ValueError rather than a cryptic SDK 500.
+    try:
+        if raw.startswith("{"):
+            key_data = json.loads(raw)
+        else:
+            with open(raw) as fh:
+                key_data = json.load(fh)
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(
+            "GCS_KYC_SA_KEY_JSON is malformed or unreadable "
+            "(expected inline service-account JSON or a readable file path)."
+        ) from exc
 
     from google.oauth2 import service_account  # lazy import
     return service_account.Credentials.from_service_account_info(

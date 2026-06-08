@@ -44,6 +44,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 from aurora_shared.database import (
     get_db,
@@ -81,6 +82,8 @@ from app.services.onboarding import (
     OnboardingError,
 )
 from app.services.onboarding.otp_service import OtpDeliveryError
+from app.services.onboarding.kyc_service import KycStorageError
+from app.services.onboarding.payplus_client import PayPlusError
 from aurora_shared.middleware.rate_limit import limiter
 
 
@@ -488,9 +491,12 @@ def init_upload_endpoint(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except KycStorageError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @router.put("/documents/{doc_id}/upload-stub")
+@limiter.limit("20/minute")
 async def upload_stub_endpoint(
     doc_id: str,
     request: Request,
@@ -498,12 +504,16 @@ async def upload_stub_endpoint(
 ):
     """
     LOCAL-DEV stub for the pre-signed upload URL. The browser PUTs the
-    raw bytes here. In production, the signed URL points to GCS and
-    Aurora never sees the bytes — Sprint 2 wires that up.
+    raw bytes here. In production (KYC_BACKEND=gcs) the signed URL points
+    to GCS and Aurora never sees the bytes, so this endpoint is disabled.
 
     NO JWT required: the doc_id is a UUIDv4 (unguessable) and the row
     is single-use (status flips to pending_review on finalize).
     """
+    # Only valid in stub mode — under gcs the browser PUTs straight to GCS.
+    if (os.getenv("KYC_BACKEND") or "stub").strip().lower() != "stub":
+        raise HTTPException(status_code=404, detail="Not found")
+
     doc = db.query(KycDocument).filter(KycDocument.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Doc not found")
@@ -516,10 +526,13 @@ async def upload_stub_endpoint(
     if len(body) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
 
-    _LOCAL_KYC_DIR.mkdir(parents=True, exist_ok=True)
-    target = _LOCAL_KYC_DIR / doc_id
-    with open(target, "wb") as fp:
-        fp.write(body)
+    try:
+        _LOCAL_KYC_DIR.mkdir(parents=True, exist_ok=True)
+        target = _LOCAL_KYC_DIR / doc_id
+        with open(target, "wb") as fp:
+            fp.write(body)
+    except OSError as e:
+        raise HTTPException(status_code=503, detail=f"Upload storage unavailable: {e}")
 
     return Response(status_code=204)
 
@@ -538,6 +551,8 @@ def finalize_upload_endpoint(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except KycStorageError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
     # Check whether the documents step is now complete (all required types
     # for the chosen legal_structure are uploaded). If so, advance.
@@ -630,8 +645,9 @@ def submit_payment_method(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except NotImplementedError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+    except (PayPlusError, NotImplementedError) as e:
+        # Provider unavailable / transport / not-implemented → clean 503, not a raw 500.
+        raise HTTPException(status_code=503, detail="Payment provider is temporarily unavailable. Please try again.")
 
     pm = PaymentMethod(
         organization_id=None,    # back-linked at activate()
@@ -661,8 +677,12 @@ def submit_payment_method(
             f"last4={token_data.get('card_last4') or token_data.get('account_last4') or 'n/a'}"
         ),
     ))
-    db.commit()
-    db.refresh(pm)
+    try:
+        db.commit()
+        db.refresh(pm)
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not save your payment method. Please try again.")
 
     try:
         state = advance_onboarding(
@@ -673,6 +693,9 @@ def submit_payment_method(
         )
     except OnboardingError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not save your payment method. Please try again.")
 
     return {
         "current_step": state.current_step,
@@ -724,6 +747,15 @@ def activate_endpoint(
         result = activate_onboarding(user_id=current_user.id, db=db)
     except OnboardingError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        # create_organization() raises ValueError on its own validation
+        # (display_name/tax-id/legal_structure) — surface as a clean 400.
+        raise HTTPException(status_code=400, detail=str(e))
+    except SQLAlchemyError:
+        # DB commit failure (e.g. transient connection drop to aurora-pg) →
+        # roll back the partial activation and ask the client to retry.
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Activation could not complete. Please try again.")
 
     # Reissue a JWT now that org context exists (so the dashboard load
     # has the correct active_org_ids without a re-login round-trip).

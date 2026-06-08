@@ -147,12 +147,21 @@ def payplus_tokenize(
         "provider_token": token,
     }
     if kind == "credit_card":
+        def _exp(field: str):
+            """Coerce an expiry field to int; a malformed value → ValueError (→ 400), never a raw 500."""
+            v = raw_payload.get(field)
+            if not v:
+                return None
+            try:
+                return int(v)
+            except (ValueError, TypeError) as exc:
+                raise ValueError(f"PayPlus payload field '{field}' is malformed") from exc
         return {
             **common,
             "card_last4":     str(raw_payload.get("card_last4") or "")[-4:] or None,
             "card_brand":     (raw_payload.get("card_brand") or "").lower() or None,
-            "card_exp_month": int(raw_payload["card_exp_month"]) if raw_payload.get("card_exp_month") else None,
-            "card_exp_year":  int(raw_payload["card_exp_year"]) if raw_payload.get("card_exp_year") else None,
+            "card_exp_month": _exp("card_exp_month"),
+            "card_exp_year":  _exp("card_exp_year"),
         }
     # direct_debit
     return {
