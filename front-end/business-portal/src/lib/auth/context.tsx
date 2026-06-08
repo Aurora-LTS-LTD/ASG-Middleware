@@ -26,6 +26,8 @@ interface AuthState {
 
 interface AuthApi {
   loginWithPassword: (email: string, password: string) => Promise<void>;
+  /** Adopt a session minted elsewhere (e.g. onboarding activate) without a re-login. */
+  adoptSession: (token: string, user: BusinessOwnerUser) => void;
   signOut: () => void;
 }
 
@@ -61,6 +63,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ status: "signed_in", user });
   }, []);
 
+  const adoptSession = useCallback((token: string, user: BusinessOwnerUser) => {
+    setSession(token, user);
+    setState({ status: "signed_in", user });
+  }, []);
+
   const signOut = useCallback(() => {
     clearSession();
     setState({ status: "signed_out", user: null });
@@ -79,8 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ...state, loginWithPassword, signOut }),
-    [state, loginWithPassword, signOut],
+    () => ({ ...state, loginWithPassword, adoptSession, signOut }),
+    [state, loginWithPassword, adoptSession, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
