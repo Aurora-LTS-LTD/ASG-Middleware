@@ -98,6 +98,10 @@ def invoice_to_dict(invoice: Invoice) -> dict:
         "description": invoice.description,
         "created_at": invoice.created_at.isoformat() if invoice.created_at else None,
         "finalized_at": invoice.finalized_at.isoformat() if invoice.finalized_at else None,
+        # Lifecycle timestamps (phase29) — getattr-guarded for pre-migration safety.
+        "submitted_at": getattr(invoice, "submitted_at", None).isoformat() if getattr(invoice, "submitted_at", None) else None,
+        "sent_at": getattr(invoice, "sent_at", None).isoformat() if getattr(invoice, "sent_at", None) else None,
+        "cancelled_at": getattr(invoice, "cancelled_at", None).isoformat() if getattr(invoice, "cancelled_at", None) else None,
         "due_date": invoice.due_date.isoformat() if invoice.due_date else None,
         "payment_status": invoice.payment_status or "unpaid",
         "amount_paid": invoice.amount_paid or 0.0,
