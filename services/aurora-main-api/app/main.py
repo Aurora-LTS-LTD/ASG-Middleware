@@ -635,6 +635,13 @@ def _run_all_phase_migrations() -> None:
     except Exception as e:
         print(f"[STARTUP] Phase 29 invoice-lifecycle migration warning: {e}")
 
+    # ── BigQuery audit export cursor table + seed rows ──
+    try:
+        from app.migrations.migrate_phase30_audit_export_cursor import run as run_phase30
+        run_phase30()
+    except Exception as e:
+        print(f"[STARTUP] Phase 30 audit-cursor migration warning: {e}")
+
     # ── P2-23: Payment links table ──
     try:
         from app.migrations.migrate_phase25_payment_links import run as run_phase25

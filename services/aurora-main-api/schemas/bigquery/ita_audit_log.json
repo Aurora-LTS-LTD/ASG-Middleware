@@ -1,0 +1,20 @@
+[
+  { "name": "id", "type": "INTEGER", "mode": "REQUIRED", "description": "Source ita_audit_log.id" },
+  { "name": "invoice_id", "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "organization_id", "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "request_id", "type": "STRING", "mode": "REQUIRED", "description": "ITA idempotency key (invoice_id:retry_count)" },
+  { "name": "operation", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "seller_tax_id_masked", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "buyer_tax_id_masked", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "amount_minor_units", "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "currency", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "http_status", "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "latency_ms", "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "success", "type": "BOOLEAN", "mode": "NULLABLE" },
+  { "name": "allocation_number", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "error_code", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "error_message", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "backend", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "response_summary", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "created_at", "type": "TIMESTAMP", "mode": "NULLABLE" }
+]
