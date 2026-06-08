@@ -79,15 +79,32 @@ async function call<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   }
 
   const text = await resp.text();
-  const data = text ? JSON.parse(text) : null;
+  // Guard the parse: a gateway/edge can return a non-JSON body (HTML 502/503,
+  // plain-text 429). An uncaught SyntaxError here would be misclassified as a
+  // generic "Network error" and mask the real, actionable status.
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
 
   if (!resp.ok) {
     const raw =
       data && typeof data === "object" && "detail" in data
         ? (data as { detail: unknown }).detail
         : data;
-    const detail: ApiErrorDetail =
-      typeof raw === "string" ? { message: raw } : (raw as ApiErrorDetail) || {};
+    let detail: ApiErrorDetail;
+    if (raw && typeof raw === "object") {
+      detail = raw as ApiErrorDetail;
+    } else if (typeof raw === "string" && raw.trim()) {
+      detail = { message: raw };
+    } else {
+      // Non-JSON / empty error body → derive a clean, status-aware message.
+      detail = { message: `Service unavailable (HTTP ${resp.status}). Please try again.` };
+    }
     throw new ApiClientError(resp.status, detail);
   }
   return data as T;
