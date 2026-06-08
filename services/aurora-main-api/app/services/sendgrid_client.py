@@ -17,12 +17,18 @@ ENV VARS:
 
 import logging
 import os
+import time
 
 import httpx
 
 log = logging.getLogger(__name__)
 
 _SENDGRID_API = "https://api.sendgrid.com/v3/mail/send"
+
+# Granular per-phase timeout (a single scalar bounds connect+read+write+pool
+# together, which lets a half-open connection or pool contention tie up a sync
+# worker far longer than intended). Used by every outbound call in this module.
+_HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config helpers
@@ -75,26 +81,34 @@ def _send(to_email: str, subject: str, html: str, plain: str) -> None:
         },
     }
 
-    try:
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.post(
-                _SENDGRID_API,
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {key}",
-                    "Content-Type": "application/json",
-                },
-            )
-        if resp.status_code not in (200, 202):
-            log.error(
-                "[sendgrid] send failed status=%s body=%s to=%s",
-                resp.status_code, resp.text[:300], to_email,
-            )
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    last_err = ""
+    # One bounded retry on TRANSIENT upstream failures (HTTP 429 / 5xx / transport).
+    # 4xx (bad payload/recipient) fails fast — retrying won't help.
+    for attempt in range(2):
+        try:
+            with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+                resp = client.post(_SENDGRID_API, json=payload, headers=headers)
+            if resp.status_code in (200, 202):
+                log.info("[sendgrid] email queued to=%s subject=%r", to_email, subject)
+                return
+            if resp.status_code == 429 or resp.status_code >= 500:
+                last_err = f"HTTP {resp.status_code}"
+                log.warning("[sendgrid] transient %s (attempt %d) to=%s", last_err, attempt + 1, to_email)
+                if attempt == 0:
+                    time.sleep(0.5)
+                    continue
+            else:
+                log.error("[sendgrid] send failed status=%s body=%s to=%s", resp.status_code, resp.text[:300], to_email)
             raise RuntimeError(f"SendGrid returned {resp.status_code}")
-        log.info("[sendgrid] email queued to=%s subject=%r", to_email, subject)
-    except httpx.RequestError as exc:
-        log.error("[sendgrid] network error sending to %s: %s", to_email, exc)
-        raise RuntimeError(f"SendGrid network error: {exc}") from exc
+        except httpx.RequestError as exc:
+            last_err = str(exc)
+            log.warning("[sendgrid] network error (attempt %d) to %s: %s", attempt + 1, to_email, exc)
+            if attempt == 0:
+                time.sleep(0.5)
+                continue
+            raise RuntimeError(f"SendGrid network error: {exc}") from exc
+    raise RuntimeError(f"SendGrid send failed after retry: {last_err}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -135,7 +149,7 @@ def send_template_email(
     }
 
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
             resp = client.post(
                 _SENDGRID_API,
                 json=payload,
@@ -289,7 +303,7 @@ def send_whatsapp_otp(to_phone_e164: str, otp: str) -> None:
     }
 
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
             resp = client.post(
                 url,
                 json=payload,
