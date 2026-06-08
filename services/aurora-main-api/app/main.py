@@ -628,6 +628,13 @@ def _run_all_phase_migrations() -> None:
     except Exception as e:
         print(f"[STARTUP] Phase 28 firm_name migration warning: {e}")
 
+    # ── Invoice lifecycle timestamps (submitted_at / sent_at / cancelled_at) ──
+    try:
+        from app.migrations.migrate_phase29_invoice_lifecycle_timestamps import run as run_phase29
+        run_phase29()
+    except Exception as e:
+        print(f"[STARTUP] Phase 29 invoice-lifecycle migration warning: {e}")
+
     # ── P2-23: Payment links table ──
     try:
         from app.migrations.migrate_phase25_payment_links import run as run_phase25

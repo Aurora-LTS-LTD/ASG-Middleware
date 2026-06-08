@@ -38,6 +38,7 @@ from app.services.invoice_service import (
     InvoiceNotFoundError,
     InvoiceStateError,
 )
+from app.services.invoice_lifecycle import transition, cancel_invoice, InvoiceTransitionError
 
 
 # ─────────────────────────────────────────────────────────────
@@ -55,6 +56,11 @@ class InvoiceCreate(BaseModel):
     beneficiary_contact: Optional[str] = None # Their phone/email (optional)
     amount_net: float                         # Amount before tax
     description: Optional[str] = None         # Optional note
+
+
+class CancelInvoiceRequest(BaseModel):
+    """Optional reason when cancelling a draft / pending_allocation invoice."""
+    reason: Optional[str] = None
 
 
 class InvoiceResponse(BaseModel):
@@ -345,22 +351,57 @@ async def send_invoice_whatsapp(
     invoice_data = invoice_to_dict(invoice)
     result = await send_invoice_via_whatsapp(invoice_data, payload.recipient_phone)
 
-    # ── Update status ──
-    invoice.status = "sent"
-    db.commit()
-
-    # ── Log the action ──
-    log = ActionLog(
-        business_id=invoice.business_id,
-        status="sent",
-        detail=f"Invoice {invoice.invoice_number} sent via WhatsApp to {payload.recipient_phone}",
+    # ── Mark sent via the central state machine (finalized → sent; idempotent
+    #    no-op if already sent). Stamps sent_at + writes the audit row. ──
+    transition(
+        db, invoice, "sent",
+        actor=f"dashboard:{getattr(current_user, 'email', current_user.id)}",
+        reason=f"WhatsApp → {payload.recipient_phone}",
     )
-    db.add(log)
-    db.commit()
 
     return {
         "message": f"Invoice {invoice.invoice_number} sent to {payload.recipient_phone}",
         "make_response": result,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENDPOINT: POST /api/v1/invoices/{id}/cancel — void a draft/pending invoice
+# ═══════════════════════════════════════════════════════════════
+@router.post("/api/v1/invoices/{invoice_id}/cancel")
+def cancel_invoice_endpoint(
+    invoice_id: int,
+    payload: CancelInvoiceRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cancel (void) a draft or pending_allocation invoice.
+
+    Finalized/sent invoices are tax-locked — reverse them with a credit note
+    (returns 409)."""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    biz_filter = get_business_filter(current_user)
+    if biz_filter is not None and invoice.business_id != biz_filter:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    try:
+        cancel_invoice(
+            db, invoice,
+            reason=(payload.reason or "cancelled via dashboard"),
+            actor=f"dashboard:{getattr(current_user, 'email', current_user.id)}",
+        )
+    except InvoiceTransitionError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "invoice_tax_locked", "message": str(e)},
+        )
+
+    return {
+        "message": f"Invoice {invoice.invoice_number} cancelled",
+        "status": invoice.status,
     }
 
 
