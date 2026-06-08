@@ -129,10 +129,14 @@ def _send_via_provider(channel: str, target: str, code: str, lang: str = "he") -
         return
 
     if channel == "email":
+        from app.services.sendgrid_client import send_onboarding_otp_email, is_configured
+        # Fail CLOSED: an unconfigured SendGrid would silently no-op (the user
+        # never gets the code) and look like success → a hard lockout. Surface it.
+        if not is_configured():
+            raise OtpDeliveryError("email", "Email provider is not configured")
         try:
-            from app.services.sendgrid_client import send_onboarding_otp_email
             send_onboarding_otp_email(target, code, ttl_minutes=10, lang=lang)
-        except RuntimeError as exc:
+        except Exception as exc:  # noqa: BLE001 — ANY provider/transport/parse failure → clean 503, never a raw 500
             raise OtpDeliveryError("email", str(exc)) from exc
         return
 
@@ -146,7 +150,7 @@ def _send_via_provider(channel: str, target: str, code: str, lang: str = "he") -
                 from app.services.sendgrid_client import send_whatsapp_otp
                 send_whatsapp_otp(target, code)
                 _dispatched = True
-            except RuntimeError as exc:
+            except Exception as exc:  # noqa: BLE001 — ANY WhatsApp failure must still fall back to SMS (not just RuntimeError)
                 log.warning("[OTP] WhatsApp tier failed (%s) — falling back to SMS", exc)
 
         # Tier 2 — SMS (Inforu or Twilio depending on SMS_PROVIDER)
@@ -156,6 +160,8 @@ def _send_via_provider(channel: str, target: str, code: str, lang: str = "he") -
                 send_sms(target, _sms_body(code, lang))
                 _dispatched = True
             except OtpSmsDeliveryError as exc:
+                raise OtpDeliveryError("phone", str(exc)) from exc
+            except Exception as exc:  # noqa: BLE001 — unexpected SMS failure → clean 503, never a raw 500
                 raise OtpDeliveryError("phone", str(exc)) from exc
 
         return
@@ -199,18 +205,22 @@ def issue_otp(
     if not target or len(target) < 3:
         raise ValueError("target is required")
 
-    # E.164 validation for phone channel — blocks toll-fraud on non-IL numbers
+    # E.164 validation for phone channel — blocks toll-fraud on non-IL numbers.
+    # (If `phonenumbers` is missing the ImportError propagates as a 500 — that's a
+    #  deploy defect, not a user error, and should be loud rather than masked.)
     if channel == "phone":
         import phonenumbers
         try:
             parsed = phonenumbers.parse(target, None)
-            if not phonenumbers.is_valid_number(parsed):
-                raise ValueError(f"Invalid phone number: {_mask_target(target)}")
-            # Restrict to Israeli numbers (+972) in production to limit toll fraud
-            if _otp_backend() != "stub" and parsed.country_code != 972:
-                raise ValueError("Only Israeli (+972) phone numbers are supported")
-        except phonenumbers.NumberParseException as exc:
-            raise ValueError(f"Phone number parse error: {exc}") from exc
+            valid = phonenumbers.is_valid_number(parsed)
+        except (phonenumbers.NumberParseException, TypeError, ValueError) as exc:
+            # Any parse-level failure (incl. a non-str target) → clean 400, never a 500.
+            raise ValueError(f"Invalid phone number: {_mask_target(target)}") from exc
+        if not valid:
+            raise ValueError(f"Invalid phone number: {_mask_target(target)}")
+        # Restrict to Israeli numbers (+972) in production to limit toll fraud
+        if _otp_backend() != "stub" and parsed.country_code != 972:
+            raise ValueError("Only Israeli (+972) phone numbers are supported")
 
     user = db.query(User).filter(User.id == user_id, User.is_active == True).first()  # noqa: E712
     if not user:
@@ -275,8 +285,15 @@ def issue_otp(
     ))
     db.commit()
 
-    # ── Dispatch (stub or real) ──
-    _send_via_provider(channel, target, code, lang=lang)
+    # ── Dispatch (stub or real). On a provider failure, expire the row we just
+    #    created so its 'pending' status doesn't trip the resend cooldown and
+    #    lock the user out of retrying after a transient provider error. ──
+    try:
+        _send_via_provider(channel, target, code, lang=lang)
+    except OtpDeliveryError:
+        otp_row.status = "expired"
+        db.commit()
+        raise
 
     payload = {
         "id": otp_row.id,

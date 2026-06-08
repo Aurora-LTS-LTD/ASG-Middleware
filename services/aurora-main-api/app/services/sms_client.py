@@ -174,7 +174,14 @@ def _twilio_send(phone_e164: str, body: str) -> None:
                 resp.status_code, _mask(phone_e164), resp.text[:200],
             )
             raise OtpSmsDeliveryError(f"Twilio returned HTTP {resp.status_code}")
-        log.info("[sms/twilio] SMS queued to %s sid=%s", _mask(phone_e164), resp.json().get("sid"))
+        # Status was 2xx → the SMS was accepted. Parsing the body for the sid is
+        # best-effort logging only; a non-JSON/empty body must NOT turn an
+        # accepted send into a 500.
+        try:
+            sid = resp.json().get("sid")
+        except Exception:  # noqa: BLE001 — JSONDecodeError etc. on an already-accepted send
+            sid = None
+        log.info("[sms/twilio] SMS queued to %s sid=%s", _mask(phone_e164), sid)
     except httpx.RequestError as exc:
         log.error("[sms/twilio] network error to %s: %s", _mask(phone_e164), exc)
         raise OtpSmsDeliveryError(f"Twilio network error: {exc}") from exc
