@@ -1,0 +1,7 @@
+[
+  { "name": "id", "type": "INTEGER", "mode": "REQUIRED", "description": "Source action_logs.id" },
+  { "name": "business_id", "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "status", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "detail", "type": "STRING", "mode": "NULLABLE", "description": "PII-redacted before export" },
+  { "name": "triggered_at", "type": "TIMESTAMP", "mode": "NULLABLE" }
+]
