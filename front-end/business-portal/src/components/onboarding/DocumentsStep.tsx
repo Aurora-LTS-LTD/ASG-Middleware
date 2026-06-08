@@ -36,6 +36,9 @@ export function DocumentsStep({ token, state, onAdvance }: StepProps) {
       }
     } catch (err) {
       setStatuses((s) => ({ ...s, [docType]: "error" }));
+      // Reset advancing so a failed post-finalize state() refresh clears the stuck
+      // "Continuing…" state and re-enables this doc's upload control for retry.
+      setAdvancing(false);
       setError(err instanceof ApiClientError ? err.detail.message || "Upload failed." : "Network error during upload.");
     }
   }

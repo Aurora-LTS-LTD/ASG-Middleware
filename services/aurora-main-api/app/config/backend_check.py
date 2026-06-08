@@ -88,6 +88,50 @@ def validate_backend_selectors() -> None:
                 "is ready.", env_name, actual or "(unset)"
             )
 
+    # ── Paired-credential checks ──
+    # A provider selector flipped to a REAL backend MUST carry its matching
+    # credentials. Without this, a half-flip (selector=production, secret
+    # absent) boots HEALTHY and only fails at the first real OTP/upload/charge —
+    # the worst time to discover it. Catch it at deploy instead.
+    def _set(name: str) -> bool:
+        return bool((os.getenv(name) or "").strip())
+
+    def _sel(name: str) -> str:
+        return (os.getenv(name) or "stub").strip().lower()
+
+    paired: List[str] = []
+
+    if _sel("OTP_BACKEND") not in ("stub", ""):
+        if not _set("SENDGRID_API_KEY"):
+            paired.append(
+                "OTP_BACKEND is non-stub but SENDGRID_API_KEY is missing — email OTP "
+                "would silently fail to deliver (user lockout)."
+            )
+        wa_ok = all(_set(v) for v in ("WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_OTP_TEMPLATE_NAME"))
+        sms_ok = _sel("SMS_PROVIDER") in ("inforu", "twilio")
+        if in_prod and not wa_ok and not sms_ok:
+            log.warning(
+                "[backend-check] PROD WARN: OTP_BACKEND is non-stub but no phone channel "
+                "is configured (WhatsApp trio incomplete AND SMS_PROVIDER not inforu/twilio) "
+                "— phone OTP will fail; email-only onboarding."
+            )
+
+    if _sel("KYC_BACKEND") == "gcs":
+        if not _set("GCS_KYC_SA_KEY_JSON"):
+            paired.append("KYC_BACKEND=gcs but GCS_KYC_SA_KEY_JSON is missing — signed upload URLs cannot be generated.")
+
+    if _sel("PAYPLUS_BACKEND") not in ("stub", ""):
+        missing = [v for v in ("PAYPLUS_API_KEY", "PAYPLUS_TERMINAL_NUMBER") if not _set(v)]
+        if missing:
+            paired.append(f"PAYPLUS_BACKEND is non-stub but missing {missing} — tokenize/charge will fail.")
+
+    if paired:
+        if in_prod:
+            hard_failures.extend(paired)
+        else:
+            for m in paired:
+                log.info("[backend-check] dev — %s (provider flipped without creds; OK if unused locally)", m)
+
     if hard_failures:
         # One consolidated message so operators see every problem at once.
         joined = "\n  - ".join(hard_failures)
