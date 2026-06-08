@@ -153,7 +153,26 @@ async def process_pending_allocations(bot=None) -> int:
                           f"{invoice.invoice_number}: {e}")
 
             else:
-                # ── Failure: schedule next retry ──
+                # ── Permanent failure (e.g. bad tax id / malformed request)? ──
+                # Don't churn through 10 retries — mark terminal immediately.
+                if not ita_response.get("retryable", True):
+                    invoice.allocation_status = "rejected"
+                    invoice.allocation_retry_count = MAX_RETRIES  # stop re-selection
+                    db.commit()
+                    print(f"[ALLOC_QUEUE] 🛑 {invoice.invoice_number} permanent ITA failure "
+                          f"({ita_response.get('error_code')}) — marked rejected")
+                    db.add(ActionLog(
+                        business_id=invoice.business_id,
+                        status="error",
+                        detail=f"Invoice {invoice.invoice_number}: permanent ITA failure "
+                               f"{ita_response.get('error_code')} — {str(ita_response.get('message', ''))[:120]}",
+                    ))
+                    db.commit()
+                    await _notify_allocation_exhausted(bot, invoice, db)
+                    await _notify_whatsapp_allocation_exhausted(invoice, db)
+                    continue
+
+                # ── Transient failure: schedule next retry ──
                 invoice.allocation_retry_count += 1
                 delay_idx = min(invoice.allocation_retry_count - 1, len(RETRY_DELAYS) - 1)
                 delay_seconds = RETRY_DELAYS[delay_idx]

@@ -34,7 +34,7 @@ NOTE — STUB-FRIENDLINESS:
 
 import datetime
 import os
-import uuid
+import re
 from typing import Optional
 
 from app.services.gcp.secrets import get_secret
@@ -57,21 +57,30 @@ def _ttl_seconds() -> int:
     return int(os.getenv("ITA_JWT_TTL_SECONDS", "300"))
 
 
+_TAX_ID_RE = re.compile(r"^\d{9}$")
+
+
+def _validate_seller_tax_id(seller_tax_id: str) -> str:
+    """Israeli ח.פ/ע.מ tax IDs are 9 digits. Reject anything else BEFORE signing,
+    so we never emit a JWT whose `sub` ITA will reject as malformed."""
+    s = (seller_tax_id or "").strip()
+    if not _TAX_ID_RE.match(s):
+        raise ValueError(
+            f"seller_tax_id must be a 9-digit Israeli tax id (got {seller_tax_id!r})"
+        )
+    return s
+
+
 def build_request_id(invoice_id: int, retry_count: int = 0) -> str:
     """
-    Build the idempotency key for an ITA request. Format:
+    Deterministic idempotency key for an ITA request:  "<invoice_id>:<retry_count>".
 
-        <invoice_id>:<retry_count>:<short-uuid>
-
-    The invoice_id+retry pair guarantees that a Cloud Tasks retry of the
-    same allocation attempt produces the SAME request_id — ITA's
-    duplicate-detection then returns the original response instead of
-    issuing a second allocation.
-
-    The trailing UUID short ensures different INVOICE × RETRY rounds
-    stay distinct even within the same second.
+    A retry of the SAME allocation attempt MUST produce the SAME request_id, so
+    ITA's duplicate-detection returns the original allocation instead of issuing
+    a second one. (A previous version appended a random uuid here, which broke
+    that guarantee — every call produced a fresh id, so retries could double-allocate.)
     """
-    return f"{invoice_id}:{retry_count}:{uuid.uuid4().hex[:8]}"
+    return f"{invoice_id}:{retry_count}"
 
 
 def sign_request(*, seller_tax_id: str, request_id: str) -> str:
@@ -85,6 +94,10 @@ def sign_request(*, seller_tax_id: str, request_id: str) -> str:
     this as a configuration error and fall back to mock if appropriate.
     """
     from jose import jwt  # already in requirements via python-jose
+
+    # Validate the taxpayer id before we sign — a malformed `sub` would be
+    # rejected by ITA anyway, and this fails fast with a clear error.
+    seller_tax_id = _validate_seller_tax_id(seller_tax_id)
 
     private_key = get_secret(_private_key_secret_name())
     if not private_key:

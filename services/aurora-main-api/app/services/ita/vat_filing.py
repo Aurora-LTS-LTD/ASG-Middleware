@@ -368,7 +368,7 @@ def _submit_to_ita(vat_return: VatReturn, db: Session) -> FilingResult:
             success=False, message="httpx not installed", backend="production"
         )
 
-    from app.services.ita.auth import build_ita_jwt  # Reuse existing JWT builder
+    from app.services.ita.auth import sign_request  # RS256 JWT signer (software-house key)
 
     url = _ita_vat_base() + _ita_vat_path()
     payload = {
@@ -385,13 +385,16 @@ def _submit_to_ita(vat_return: VatReturn, db: Session) -> FilingResult:
         "invoiceCount": vat_return.invoice_count,
     }
 
-    jwt_token = build_ita_jwt()
+    # Deterministic per (return, period) so a retry reuses the same id (ITA dedup).
+    request_id = "vat:" + hashlib.sha256(
+        f"{vat_return.id}:{vat_return.period_year}:{vat_return.period_number}".encode()
+    ).hexdigest()[:16]
+    # Reuse the allocation JWT signer — `sub` is the filing taxpayer's tax id.
+    jwt_token = sign_request(seller_tax_id=vat_return.tax_id, request_id=request_id)
     headers = {
         "Authorization": f"Bearer {jwt_token}",
         "Content-Type": "application/json",
-        "X-Aurora-Request-Id": hashlib.sha256(
-            f"{vat_return.id}{time.time()}".encode()
-        ).hexdigest()[:16],
+        "X-Aurora-Request-Id": request_id,
     }
 
     t0 = time.monotonic()
