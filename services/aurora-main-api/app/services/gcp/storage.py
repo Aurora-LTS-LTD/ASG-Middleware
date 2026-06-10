@@ -201,50 +201,44 @@ def exists(*, object_key: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────
-# KYC — signed PUT URLs  (separate from receipts signed_url above)
-# Uses the KYC service account key (GCS_KYC_SA_KEY_JSON) for signing
-# because Cloud Run Workload Identity does not expose a private key,
-# which is required for v4 signed URL generation.
+# KYC — KEYLESS v4 signed PUT URLs (Workload Identity + IAM signBlob).
+#
+# The org policy iam.disableServiceAccountKeyCreation forbids exported SA
+# keys. v4 signing normally needs a local private key — so instead we sign via
+# the IAM Credentials signBlob API using the Cloud Run runtime SA's AMBIENT
+# (Workload Identity) credentials. No key on disk, in env, or in a secret.
+#
+# Requires: the runtime SA holds roles/iam.serviceAccountTokenCreator on ITSELF
+# (grants iam.serviceAccounts.signBlob), plus objectCreator + objectViewer on
+# the bucket. signBlob is NOT blocked by iam.disableServiceAccountKeyCreation.
 # ─────────────────────────────────────────────────────────────
 
-def _kyc_credentials():
+def _kyc_signing_identity():
     """
-    Return google.oauth2.service_account.Credentials for the KYC bucket.
+    Return (ambient_credentials, signing_sa_email) for keyless v4 signing.
 
-    Reads GCS_KYC_SA_KEY_JSON from env. Accepted formats:
-      - A JSON string:  '{"type": "service_account", ...}'
-      - A file path:    '/run/secrets/kyc-sa-key.json'
+    Uses google.auth.default() — on Cloud Run this is the runtime SA via
+    Workload Identity (no exported key). The access token it yields lets
+    google-cloud-storage sign through the IAM signBlob API.
 
-    Raises ValueError clearly if the env var is absent when KYC_BACKEND=gcs,
-    so the error message is actionable rather than a cryptic SDK crash.
+    The signing SA email comes from GCS_SIGNING_SA_EMAIL if set, else from the
+    ambient credentials (the runtime SA). Raises ValueError if it can't be
+    resolved, so the failure is actionable rather than a cryptic SDK crash.
     """
-    raw = (os.getenv("GCS_KYC_SA_KEY_JSON") or "").strip()
-    if not raw:
+    import google.auth  # lazy import
+    from google.auth.transport.requests import Request
+
+    creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    creds.refresh(Request())  # populate the access token (+ SA email on GCE/Cloud Run)
+
+    sa_email = (os.getenv("GCS_SIGNING_SA_EMAIL") or "").strip() or getattr(creds, "service_account_email", "")
+    if not sa_email or sa_email == "default":
         raise ValueError(
-            "GCS_KYC_SA_KEY_JSON is not set. "
-            "Provide the KYC service account key JSON (string or file path) "
-            "or set KYC_BACKEND=stub for local development."
+            "Cannot determine the signing service account email for keyless KYC "
+            "signing. On Cloud Run it comes from the runtime SA; otherwise set "
+            "GCS_SIGNING_SA_EMAIL to the runtime SA email."
         )
-
-    # Detect file-path vs. inline JSON. Surface malformed/unreadable key
-    # material as an actionable ValueError rather than a cryptic SDK 500.
-    try:
-        if raw.startswith("{"):
-            key_data = json.loads(raw)
-        else:
-            with open(raw) as fh:
-                key_data = json.load(fh)
-    except (json.JSONDecodeError, OSError) as exc:
-        raise ValueError(
-            "GCS_KYC_SA_KEY_JSON is malformed or unreadable "
-            "(expected inline service-account JSON or a readable file path)."
-        ) from exc
-
-    from google.oauth2 import service_account  # lazy import
-    return service_account.Credentials.from_service_account_info(
-        key_data,
-        scopes=["https://www.googleapis.com/auth/cloud-platform"],
-    )
+    return creds, sa_email
 
 
 def signed_put_url(
@@ -265,7 +259,8 @@ def signed_put_url(
         at the TCP layer — a 5 GB upload is closed before a single byte lands
 
     KYC_BACKEND=stub: returns the local upload-stub URL for dev/test.
-    KYC_BACKEND=gcs:  generates a real v4 signed URL using the KYC SA key.
+    KYC_BACKEND=gcs:  generates a real v4 signed URL signed KEYLESSLY via the
+                      IAM signBlob API (Workload Identity — no exported key).
     """
     kyc_backend = (os.getenv("KYC_BACKEND") or "stub").strip().lower()
 
@@ -277,14 +272,15 @@ def signed_put_url(
 
     if kyc_backend == "gcs":
         import datetime as dt
-
-        # Validate credentials before importing the SDK so errors are always
-        # a clear ValueError (not a cryptic ModuleNotFoundError).
-        creds = _kyc_credentials()
         from google.cloud import storage as gcs_sdk  # lazy import
-        client = gcs_sdk.Client(credentials=creds)
+
+        creds, sa_email = _kyc_signing_identity()  # ambient WI creds + runtime SA email
+        client = gcs_sdk.Client()  # ambient credentials
         blob = client.bucket(bucket).blob(object_key)
 
+        # Passing service_account_email + access_token (instead of a key-backed
+        # `credentials`) makes google-cloud-storage sign via the IAM signBlob
+        # API — keyless, org-policy-compatible.
         url = blob.generate_signed_url(
             version="v4",
             expiration=dt.timedelta(seconds=ttl_seconds),
@@ -293,11 +289,12 @@ def signed_put_url(
             # x-goog-content-length-range causes GCS to reject uploads
             # below 1 byte or above max_bytes at the network level.
             headers={"x-goog-content-length-range": f"1,{max_bytes}"},
-            credentials=creds,
+            service_account_email=sa_email,
+            access_token=creds.token,
         )
         log.info(
-            "[kyc/gcs] signed PUT URL generated bucket=%s key=%s ttl=%ds",
-            bucket, object_key, ttl_seconds,
+            "[kyc/gcs] keyless signed PUT URL bucket=%s key=%s ttl=%ds via signBlob(%s)",
+            bucket, object_key, ttl_seconds, sa_email,
         )
         return url
 
