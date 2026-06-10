@@ -117,8 +117,16 @@ def validate_backend_selectors() -> None:
             )
 
     if _sel("KYC_BACKEND") == "gcs":
-        if not _set("GCS_KYC_SA_KEY_JSON"):
-            paired.append("KYC_BACKEND=gcs but GCS_KYC_SA_KEY_JSON is missing — signed upload URLs cannot be generated.")
+        # Keyless (Workload Identity + IAM signBlob) — there is NO exported key to
+        # require. The runtime SA needs roles/iam.serviceAccountTokenCreator (self)
+        # + objectCreator + objectViewer on the bucket; those are IAM bindings, not
+        # env/secrets, so they can't be asserted here (the verify script checks
+        # them live). Warn if the bucket is unset (would fall back to a default).
+        if in_prod and not _set("GCS_BUCKET_KYC"):
+            log.warning(
+                "[backend-check] PROD WARN: KYC_BACKEND=gcs but GCS_BUCKET_KYC is unset "
+                "— falling back to the 'asg-kyc-prod' default; set it explicitly."
+            )
 
     if _sel("PAYPLUS_BACKEND") not in ("stub", ""):
         missing = [v for v in ("PAYPLUS_API_KEY", "PAYPLUS_TERMINAL_NUMBER") if not _set(v)]

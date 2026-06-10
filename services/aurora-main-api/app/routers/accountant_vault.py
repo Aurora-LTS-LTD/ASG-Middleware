@@ -20,8 +20,9 @@ AUTHORIZATION:
 STORAGE BACKENDS:
   STORAGE_BACKEND=stub  → writes the bytes to a local /tmp dir
                           (dev / pre-GCS deploy)
-  STORAGE_BACKEND=gcs   → uploads to the vault bucket via the GCS
-                          client (reuses _kyc_credentials() from P0-07)
+  STORAGE_BACKEND=gcs   → uploads to the vault bucket via the GCS client
+                          using ambient Workload Identity creds (keyless;
+                          needs roles/storage.objectCreator on the bucket)
 
 The bytes are SHA-256 hashed server-side so the ClientDocument row
 records a content-addressable fingerprint regardless of source.
@@ -112,10 +113,8 @@ def _write_to_storage(*, bucket: str, object_key: str, blob: bytes, mime_type: s
     """
     backend = _storage_backend()
     if backend == "gcs":
-        from app.services.gcp.storage import _kyc_credentials
         from google.cloud import storage as gcs_sdk
-        creds = _kyc_credentials()
-        client = gcs_sdk.Client(credentials=creds)
+        client = gcs_sdk.Client()  # ambient Workload Identity creds (keyless); needs roles/storage.objectCreator
         b = client.bucket(bucket)
         bl = b.blob(object_key)
         bl.upload_from_string(blob, content_type=mime_type, timeout=60)
