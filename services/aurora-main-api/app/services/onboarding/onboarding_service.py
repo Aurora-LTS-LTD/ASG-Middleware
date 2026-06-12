@@ -118,6 +118,26 @@ STEP_ORDER = [
 ]
 
 
+def _require_phone_otp() -> bool:
+    """
+    Phone verification is ON by default. Set ONBOARDING_REQUIRE_PHONE_OTP=false to
+    SKIP the phone_otp step — e.g. while the SMS provider account is pending approval.
+
+    This is a REVERSIBLE config flag, not a removal: the phone-OTP endpoints and
+    code are untouched; flipping the env back to true re-enables the step with no
+    redeploy of code. Keep it true in production once SMS/WhatsApp is live.
+    """
+    return (os.getenv("ONBOARDING_REQUIRE_PHONE_OTP", "true").strip().lower()
+            not in ("0", "false", "no", "off"))
+
+
+def _step_enabled(step: str) -> bool:
+    """Whether a wizard step is active under the current config."""
+    if step == "phone_otp":
+        return _require_phone_otp()
+    return True
+
+
 def _load_payload(state: OnboardingState) -> dict:
     if not state.draft_payload:
         return {}
@@ -157,6 +177,11 @@ def _advance_step(state: OnboardingState, just_finished: str) -> str:
         idx = STEP_ORDER.index(just_finished) if just_finished in STEP_ORDER else 0
 
     next_idx = min(idx + 1, len(STEP_ORDER) - 1)
+    # Skip any steps disabled by config (e.g. phone_otp when
+    # ONBOARDING_REQUIRE_PHONE_OTP=false), so the wizard never lands on a step
+    # a user can't complete.
+    while next_idx < len(STEP_ORDER) - 1 and not _step_enabled(STEP_ORDER[next_idx]):
+        next_idx += 1
     state.current_step = STEP_ORDER[next_idx]
     return state.current_step
 
@@ -434,7 +459,7 @@ def activate_onboarding(*, user_id: int, db: Session) -> dict:
     draft = _load_payload(state)
 
     # ── Pre-flight gates ──
-    if not user.phone_verified_at:
+    if _require_phone_otp() and not user.phone_verified_at:
         raise OnboardingError("Phone is not verified")
     if not user.email_verified_at:
         raise OnboardingError("Email is not verified")

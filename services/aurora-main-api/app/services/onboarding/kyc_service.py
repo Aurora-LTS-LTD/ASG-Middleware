@@ -251,12 +251,11 @@ def finalize_document_upload(
         doc.bytes_size = actual_size
 
     elif backend == "gcs":
-        from app.services.gcp.storage import _kyc_credentials
-
-        creds = _kyc_credentials()  # ValueError (missing/malformed key) → 400
+        # Keyless: read via ambient Workload Identity credentials (the runtime
+        # SA). Needs roles/storage.objectViewer on the bucket. No exported key.
         try:
             from google.cloud import storage as gcs_sdk  # lazy import
-            client = gcs_sdk.Client(credentials=creds)
+            client = gcs_sdk.Client()  # ambient credentials
             blob = client.bucket(doc.gcs_bucket).blob(doc.gcs_object_key)
             exists = blob.exists()
         except Exception as exc:  # noqa: BLE001 — GCS transport/permission/SDK error → 503, not a raw 500
