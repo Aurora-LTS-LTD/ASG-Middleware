@@ -24,6 +24,21 @@ PAYPLUS_BACKEND, KYC_BACKEND, OTP_BACKEND) are checked at the WARN
 level only — they have legitimate "feature off" modes where stub is
 acceptable in production. The hard-fail list is restricted to the
 three audit-critical ones.
+
+ESCAPE HATCH — AURORA_ALLOW_MOCK_ITA (pre-cutover launch window):
+  The Israeli Tax Authority "Software House" cutover is a gated,
+  external dependency. Until it lands, ITA_BACKEND must stay 'mock'
+  — but onboarding, KYC, billing, and every funnel EXCEPT invoice
+  issuance work without ITA. To let the service serve those flows
+  before cutover, set AURORA_ALLOW_MOCK_ITA=1. This downgrades the
+  ITA_BACKEND='mock' hard-fail to a CRITICAL log line (logged every
+  boot so it can't be forgotten). It does NOT exempt ITA_BACKEND
+  'stub'/'' (those are genuine misconfigurations, not the known
+  pre-cutover state), and it does NOT touch STORAGE/AUDIT/PayPlus
+  hard-fails. Remove the flag the moment ITA cutover completes and the
+  guard re-arms automatically. Invoice allocation ≥₪25k still calls
+  the mock ITA client, which returns a clearly-fake number — so no
+  real tax document is ever issued against a mock allocation.
 """
 from __future__ import annotations
 
@@ -55,6 +70,11 @@ def _is_cloud_run() -> bool:
     return os.getenv("AURORA_RUNTIME", "").strip().lower() == "cloud_run"
 
 
+def _allow_mock_ita() -> bool:
+    """True when the pre-cutover ITA escape hatch is explicitly enabled."""
+    return (os.getenv("AURORA_ALLOW_MOCK_ITA") or "").strip().lower() in ("1", "true", "yes")
+
+
 def validate_backend_selectors() -> None:
     """
     Raise RuntimeError in cloud_run mode for any HARD_FAIL backend
@@ -70,6 +90,19 @@ def validate_backend_selectors() -> None:
         actual = (os.getenv(env_name) or "").strip().lower()
         # If unset (""), evaluate against the empty-string forbidden marker.
         if actual in forbidden:
+            # ── Escape hatch: ITA_BACKEND='mock' before the ITA cutover ──
+            # Only 'mock' (the known pre-cutover state) is exemptable, and
+            # only when AURORA_ALLOW_MOCK_ITA is explicitly set. 'stub'/''
+            # remain hard failures (genuine misconfig).
+            if env_name == "ITA_BACKEND" and actual == "mock" and _allow_mock_ita():
+                log.critical(
+                    "[backend-check] ⚠️  ITA_BACKEND=mock permitted in production via "
+                    "AURORA_ALLOW_MOCK_ITA — pre-cutover launch window ONLY. Invoice "
+                    "allocation returns FAKE numbers that will NOT reconcile at rashut "
+                    "hamisim. Remove this flag the moment the ITA Software House cutover "
+                    "completes."
+                )
+                continue
             msg = (
                 f"{env_name}={actual!r} is forbidden in production — "
                 f"set to a real backend (allowed != {sorted(set(forbidden))})"
