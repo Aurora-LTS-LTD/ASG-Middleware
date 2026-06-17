@@ -20,11 +20,14 @@ WHY THIS EXISTS:
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 from aurora_shared.database import create_tables
+
+log = logging.getLogger("aurora.db_setup")
 
 _MAX_ATTEMPTS = int(os.getenv("AURORA_DB_SETUP_MAX_ATTEMPTS", "5"))
 _BASE_DELAY_S = float(os.getenv("AURORA_DB_SETUP_BASE_DELAY_S", "2"))
@@ -221,7 +224,7 @@ def run_db_setup() -> None:
         from app.migrations.migrate_phase21_vault import run_phase21_vault_migrations
         run_phase21_vault_migrations()
     except Exception as e:
-        print(f"[STARTUP] Phase 21 Vault migration warning: {e}")
+        log.error("[db_setup] Phase 21 Vault migration FAILED: %s", e)
 
     for _phase_mod in (
         "migrate_phase22_sanctions",
@@ -239,7 +242,7 @@ def run_db_setup() -> None:
             mod = importlib.import_module(f"app.migrations.{_phase_mod}")
             mod.run()
         except Exception as e:
-            print(f"[STARTUP] {_phase_mod} migration warning: {e}")
+            log.error("[db_setup] %s migration FAILED: %s", _phase_mod, e)
 
 
 async def run_db_setup_resilient() -> bool:

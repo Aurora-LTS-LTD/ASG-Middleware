@@ -2,14 +2,14 @@
 from __future__ import annotations
 import logging
 from sqlalchemy import inspect, text
-from aurora_shared.database.connection import engine
+from aurora_shared.database.connection import engine, get_engine
 
 log = logging.getLogger(__name__)
 _IS_PG = engine.dialect.name == "postgresql"
 
 
 def run() -> None:
-    if "vat_returns" in inspect(engine).get_table_names():
+    if "vat_returns" in inspect(get_engine()).get_table_names():
         log.debug("[phase24] vat_returns exists — skipping")
         return
     log.info("[phase24] creating vat_returns")

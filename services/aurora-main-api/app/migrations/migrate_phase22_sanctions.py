@@ -30,7 +30,7 @@ import logging
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from aurora_shared.database.connection import engine, SessionLocal
+from aurora_shared.database.connection import engine, SessionLocal, get_engine
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ _IS_POSTGRES = engine.dialect.name == "postgresql"
 
 
 def run() -> None:
-    inspector = inspect(engine)
+    inspector = inspect(get_engine())  # real Engine — inspect() can't introspect the _LazyEngine proxy
     existing = set(inspector.get_table_names())
 
     with engine.begin() as conn:

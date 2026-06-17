@@ -6,14 +6,14 @@ safe on every boot. Mirrors the dialect-aware pattern of migrate_phase25.
 from __future__ import annotations
 import logging
 from sqlalchemy import inspect, text
-from aurora_shared.database.connection import engine
+from aurora_shared.database.connection import engine, get_engine
 
 log = logging.getLogger(__name__)
 _PG = engine.dialect.name == "postgresql"
 
 
 def run() -> None:
-    if "accountant_password_resets" in inspect(engine).get_table_names():
+    if "accountant_password_resets" in inspect(get_engine()).get_table_names():
         log.debug("[phase27] accountant_password_resets exists")
         return
     log.info("[phase27] creating accountant_password_resets")
