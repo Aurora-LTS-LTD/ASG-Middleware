@@ -6,24 +6,8 @@
     (function(){var A="https://api-aurora-lts.com",f=window.fetch.bind(window);window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/")===0)u=A+u;return f(u,o);};})();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora LTS — Invoice Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            50: '#eef1fe',
-                            100: '#d9dffb',
-                            500: '#4f6ef7',
-                            600: '#3b55e6',
-                            700: '#2d42c9',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Tailwind compiled locally (was https://cdn.tailwindcss.com — CDN blocked by Tauri webview in production). Brand colors live in tailwind.config.js; rebuild via `npm run build:css`. -->
+    <link rel="stylesheet" href="tailwind.css">
     <style>
         .toast {
             animation: slideIn 0.3s ease-out, fadeOut 0.5s ease-in 2.5s;
