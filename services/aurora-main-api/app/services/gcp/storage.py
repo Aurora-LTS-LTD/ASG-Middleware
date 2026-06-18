@@ -299,3 +299,40 @@ def signed_put_url(
         return url
 
     raise ValueError(f"Unknown KYC_BACKEND='{kyc_backend}'")
+
+
+def signed_get_url(*, bucket: str, object_key: str, ttl_seconds: int = 900) -> str:
+    """
+    Generate a v4 signed GET (download) URL for an object in `bucket`, signed
+    KEYLESSLY via the IAM signBlob API (Workload Identity) — same approach as
+    signed_put_url, because the org policy iam.disableServiceAccountKeyCreation
+    forbids exported keys. Used by the accountant vault to hand the portal a
+    time-limited download link for a stored document.
+
+    STORAGE_BACKEND=stub → returns a local file:// path (dev only).
+    STORAGE_BACKEND=gcs  → keyless v4 signed GET URL for bucket/object_key.
+    """
+    backend = (os.getenv("STORAGE_BACKEND") or "stub").strip().lower()
+
+    if backend == "gcs":
+        import datetime as dt
+        from google.cloud import storage as gcs_sdk  # lazy import
+
+        creds, sa_email = _kyc_signing_identity()  # ambient WI creds + runtime SA email
+        client = gcs_sdk.Client()
+        blob = client.bucket(bucket).blob(object_key)
+        url = blob.generate_signed_url(
+            version="v4",
+            expiration=dt.timedelta(seconds=ttl_seconds),
+            method="GET",
+            service_account_email=sa_email,
+            access_token=creds.token,
+        )
+        log.info(
+            "[vault/gcs] keyless signed GET URL bucket=%s key=%s ttl=%ds via signBlob(%s)",
+            bucket, object_key, ttl_seconds, sa_email,
+        )
+        return url
+
+    # stub
+    return f"file://{object_key}"
