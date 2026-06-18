@@ -1,0 +1,75 @@
+# =====================================================================
+# Aurora Business Portal — Cloud Build pipeline
+# =====================================================================
+#
+# Builds the Next.js static export and deploys to Firebase Hosting at
+# https://app.aurora-ltd.co.il (Firebase site: aurora-lts-portal).
+#
+# TRIGGER (manual or via Cloud Build Trigger on push to main):
+#   gcloud builds submit \
+#       --project=aurora-lts-prod \
+#       --config=cloudbuild.yaml \
+#       ./front-end/business-portal
+#
+# NOTE on env vars:
+#   NEXT_PUBLIC_* values are inlined into the static JS bundle at build
+#   time. Changing them requires a rebuild — they are NOT runtime config.
+#   Production value lives only in this file (kept in git, not secret).
+#   Local dev uses .env.local in the source dir.
+#
+# IAM ON THE CLOUD BUILD SA (default: PROJECT_NUMBER-compute@developer):
+#   roles/firebasehosting.admin   — to deploy the hosting site
+#   roles/firebase.admin          — to enumerate Firebase projects
+#   (both already granted from the marketing-site pipeline setup)
+# =====================================================================
+
+steps:
+  # 1) Install deps (Next.js 15 + React 19 + Tailwind 4)
+  - name: 'node:20'
+    id: 'install'
+    entrypoint: 'npm'
+    args: ['ci', '--no-audit', '--no-fund']
+
+  # 2) Build Next.js static export.
+  #    NEXT_PUBLIC_AURORA_API_BASE is inlined into the JS at this step;
+  #    runtime cannot change it — must rebuild to change.
+  - name: 'node:20'
+    id: 'build'
+    entrypoint: 'npm'
+    args: ['run', 'build']
+    env:
+      - 'NEXT_TELEMETRY_DISABLED=1'
+      - 'NODE_ENV=production'
+      - 'NEXT_PUBLIC_AURORA_API_BASE=https://api-aurora-lts.com'
+
+  # 3) Deploy to Firebase Hosting (site: aurora-lts-portal).
+  #    firebase-tools is installed at runtime so we don't have to pin a
+  #    pre-built container image — keeps the pipeline portable.
+  - name: 'node:20'
+    id: 'deploy'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        npx -y firebase-tools@latest deploy \
+          --only hosting:aurora-lts-portal \
+          --project aurora-lts-prod \
+          --non-interactive \
+          --force
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+  # Allow declaring metadata substitutions (like _PIPELINE below) that
+  # aren't referenced in the build template.
+  substitution_option: 'ALLOW_LOOSE'
+
+# Next.js 15 + npm install on a fresh container typically ~90-120s;
+# 600s ceiling is generous.
+timeout: '600s'
+
+# Tag this pipeline so it's distinguishable in `gcloud builds list`
+# from the M1 API builds (filter via substitutions._PIPELINE=business-portal).
+substitutions:
+  _PIPELINE: 'business-portal'
