@@ -7,6 +7,14 @@
     <!-- Tailwind compiled locally (was https://cdn.tailwindcss.com — CDN blocked by Tauri webview in production). Brand colors live in tailwind.config.js; rebuild via `npm run build:css`. -->
     <link rel="stylesheet" href="tailwind.css">
     <style>
+        /* Aurora-borealis login backdrop — radial purple + teal orbs on deep navy.
+           Matches the marketing-site hero composition. */
+        .aurora-login-bg {
+            background:
+                radial-gradient(circle at 25% 30%, rgba(124, 58, 237, 0.35), transparent 55%),
+                radial-gradient(circle at 75% 70%, rgba(20, 184, 166, 0.30), transparent 55%),
+                linear-gradient(135deg, #070912 0%, #0a0d1e 100%);
+        }
         .toast {
             animation: slideIn 0.3s ease-out, fadeOut 0.5s ease-in 2.5s;
             animation-fill-mode: forwards;
@@ -20,11 +28,11 @@
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- LOGIN SCREEN                                                -->
 <!-- ═══════════════════════════════════════════════════════════ -->
-<div id="login-screen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
+<div id="login-screen" class="min-h-screen flex items-center justify-center relative overflow-hidden aurora-login-bg">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
         <!-- Logo -->
         <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-brand-600">Aurora LTS</h1>
+            <h1 class="text-3xl font-bold bg-gradient-to-br from-aurora-purple via-aurora-indigo to-aurora-teal bg-clip-text text-transparent">Aurora LTS</h1>
             <p class="text-xs text-slate-400 mt-1">אורורה אל.טי.אס. בע"מ</p>
             <p class="text-slate-500 mt-2">Smart Business OS for Israeli SMBs</p>
         </div>
@@ -45,7 +53,7 @@
             </div>
             <p id="login-error" class="text-red-500 text-sm hidden"></p>
             <button onclick="doLogin()" id="login-btn"
-                class="w-full bg-brand-500 hover:bg-brand-600 text-white py-3 rounded-lg text-sm font-medium transition-colors">
+                class="w-full bg-gradient-to-br from-aurora-purple via-aurora-indigo to-aurora-teal text-white py-3 rounded-lg text-sm font-medium shadow-lg shadow-aurora-purple/30 hover:shadow-xl hover:shadow-aurora-purple/50 transition-shadow">
                 Log In
             </button>
         </div>
@@ -66,7 +74,7 @@
     <aside class="w-64 bg-slate-900 text-white flex flex-col">
         <!-- Logo -->
         <div class="p-6 border-b border-slate-700">
-            <h1 class="text-xl font-bold text-brand-500">Aurora LTS</h1>
+            <h1 class="text-xl font-bold bg-gradient-to-br from-aurora-purple via-aurora-indigo to-aurora-teal bg-clip-text text-transparent">Aurora LTS</h1>
             <p class="text-xs text-slate-500 mt-0.5">אורורה אל.טי.אס. בע"מ</p>
             <p class="text-sm text-slate-400 mt-1">Invoice Dashboard</p>
         </div>
@@ -189,7 +197,7 @@
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-2xl font-bold text-slate-800">Invoices</h2>
                 <button onclick="showCreateModal()"
-                    class="bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    class="bg-gradient-to-br from-aurora-purple via-aurora-indigo to-aurora-teal text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-aurora-purple/30 hover:shadow-xl hover:shadow-aurora-purple/50 transition-shadow">
                     + New Invoice
                 </button>
             </div>
@@ -343,7 +351,7 @@
             <button onclick="hideCreateModal()"
                 class="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
             <button onclick="submitInvoice()"
-                class="bg-brand-500 hover:bg-brand-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
+                class="bg-gradient-to-br from-aurora-purple via-aurora-indigo to-aurora-teal text-white px-6 py-2 rounded-lg text-sm font-medium shadow-lg shadow-aurora-purple/30 hover:shadow-xl hover:shadow-aurora-purple/50 transition-shadow">
                 Create Invoice
             </button>
         </div>
