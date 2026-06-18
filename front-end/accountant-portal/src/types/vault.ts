@@ -78,9 +78,15 @@ export interface IngestionAddressResponse {
   whatsapp_display: string | null;  // formatted phone for display
 }
 
+// Matches the live backend POST .../vault/clients/{id}/documents/manual response
+// (services/aurora-main-api/app/routers/accountant_vault.py → ManualUploadResponse).
+// The upload mutation refetches the document list on success, so it doesn't rely
+// on the full ClientDocument being returned here.
 export interface ManualUploadResponse {
-  ok: true;
-  document: ClientDocument;
+  document_id: number;
+  status: string;
+  sha256: string;
+  bytes_size: number;
 }
 
 export interface ReclassifyRequest {
