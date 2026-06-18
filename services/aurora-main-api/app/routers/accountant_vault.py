@@ -33,11 +33,13 @@ import datetime
 import hashlib
 import logging
 import os
+import secrets
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from aurora_shared.database import get_db
@@ -45,6 +47,7 @@ from aurora_shared.database.models import (
     AccountantEngagement,
     ClientDocument,
     User,
+    VaultIngestionAddress,
 )
 from aurora_shared.middleware.auth_middleware import require_accountant
 from aurora_shared.middleware.rate_limit import limiter
@@ -126,6 +129,45 @@ def _write_to_storage(*, bucket: str, object_key: str, blob: bytes, mime_type: s
     with open(full, "wb") as fh:
         fh.write(blob)
     return f"file://{full}"
+
+
+# Ingestion address email: docs+<token>@<domain>. No inbound parser is wired
+# yet, so the format is configurable here and surfaced to the portal for display.
+_INGEST_EMAIL_LOCALPART = (os.getenv("VAULT_INGEST_EMAIL_LOCALPART") or "docs").strip()
+_INGEST_EMAIL_DOMAIN = (os.getenv("VAULT_INGEST_EMAIL_DOMAIN") or "api-aurora-lts.com").strip()
+
+
+def _serialize_doc(doc: ClientDocument) -> dict:
+    """ClientDocument → the shape the accountant-portal expects (types/vault.ts)."""
+    return {
+        "id": doc.id,
+        "agency_id": doc.agency_id,
+        "client_id": doc.client_id,
+        "uploaded_by_vector": doc.uploaded_by_vector,
+        "s3_key": doc.s3_key,
+        "document_type": doc.document_type,
+        "file_name": doc.file_name,
+        "mime_type": doc.mime_type,
+        "size_bytes": doc.size_bytes,
+        "sha256": doc.sha256,
+        "sender_phone_e164": doc.sender_phone_e164,
+        "sender_email": doc.sender_email,
+        "extracted_metadata": doc.extracted_metadata,
+        "tax_year": doc.tax_year,
+        "status": doc.status,
+        "error_reason": doc.error_reason,
+        "created_at": doc.created_at.isoformat() if doc.created_at else None,
+        "archived_until": doc.archived_until.isoformat() if doc.archived_until else None,
+    }
+
+
+def _download_url(doc: ClientDocument) -> str:
+    """Time-limited download URL for a stored document (keyless v4 signed GET on GCS)."""
+    if _storage_backend() == "gcs":
+        from app.services.gcp.storage import signed_get_url
+        return signed_get_url(bucket=doc.s3_bucket, object_key=doc.s3_key)
+    # stub: the upload wrote to _stub_dir() with "/" flattened to "_"
+    return f"file://{os.path.join(_stub_dir(), doc.s3_key.replace('/', '_'))}"
 
 
 @router.post(
@@ -223,3 +265,159 @@ async def upload_manual(
         sha256=sha,
         bytes_size=size_bytes,
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# Sprint 8.4 — vault read surface (list / get+download / ingestion / reclassify)
+# ─────────────────────────────────────────────────────────────
+@router.get("/clients/{client_id}/documents")
+@limiter.limit("120/minute")
+async def list_documents(
+    request: Request,
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_accountant),
+    tax_year: Optional[int] = Query(None),
+    document_type: Optional[str] = Query(None),
+    uploaded_by_vector: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    """List a client's vault documents (most-recent first) with optional filters + pagination."""
+    _assert_engagement(current_user.id, client_id, db)
+    q = db.query(ClientDocument).filter(
+        ClientDocument.client_id == client_id,
+        ClientDocument.deleted_at.is_(None),
+    )
+    if tax_year is not None:
+        q = q.filter(ClientDocument.tax_year == tax_year)
+    if document_type:
+        q = q.filter(ClientDocument.document_type == document_type)
+    if uploaded_by_vector:
+        q = q.filter(ClientDocument.uploaded_by_vector == uploaded_by_vector)
+    if status:
+        q = q.filter(ClientDocument.status == status)
+    total = q.count()
+    rows = (
+        q.order_by(ClientDocument.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "documents": [_serialize_doc(d) for d in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get("/documents/{document_id}")
+@limiter.limit("120/minute")
+async def get_document(
+    request: Request,
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_accountant),
+):
+    """Fetch a single vault document + a time-limited download URL."""
+    doc = (
+        db.query(ClientDocument)
+        .filter(ClientDocument.id == document_id, ClientDocument.deleted_at.is_(None))
+        .first()
+    )
+    if doc is None:
+        raise HTTPException(status_code=404, detail="document_not_found")
+    _assert_engagement(current_user.id, doc.client_id, db)
+    return {"document": _serialize_doc(doc), "download_url": _download_url(doc)}
+
+
+@router.get("/clients/{client_id}/ingestion-address")
+@limiter.limit("60/minute")
+async def get_ingestion_address(
+    request: Request,
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_accountant),
+):
+    """Get the client's email/WhatsApp ingestion address (provisioned on first call)."""
+    _assert_engagement(current_user.id, client_id, db)
+    addr = (
+        db.query(VaultIngestionAddress)
+        .filter(VaultIngestionAddress.client_id == client_id)
+        .first()
+    )
+    if addr is None:
+        addr = VaultIngestionAddress(
+            client_id=client_id,
+            email_alias_token=secrets.token_hex(8),
+            active=True,
+        )
+        db.add(addr)
+        try:
+            db.commit()
+            db.refresh(addr)
+        except IntegrityError:
+            # client_id is unique — a concurrent call won; reuse the winner's row.
+            db.rollback()
+            addr = (
+                db.query(VaultIngestionAddress)
+                .filter(VaultIngestionAddress.client_id == client_id)
+                .first()
+            )
+    return {
+        "ingestion_address": {
+            "client_id": addr.client_id,
+            "email_alias_token": addr.email_alias_token,
+            "whatsapp_e164": addr.whatsapp_e164,
+            "active": addr.active,
+        },
+        "email_full": f"{_INGEST_EMAIL_LOCALPART}+{addr.email_alias_token}@{_INGEST_EMAIL_DOMAIN}",
+        "whatsapp_display": addr.whatsapp_e164,
+    }
+
+
+class ReclassifyRequest(BaseModel):
+    document_type: Optional[str] = None
+    tax_year: Optional[int] = None
+
+
+@router.post("/documents/{document_id}/reclassify")
+@limiter.limit("60/minute")
+async def reclassify_document(
+    request: Request,
+    document_id: int,
+    body: ReclassifyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_accountant),
+):
+    """Override a document's type / tax year after (mis)classification."""
+    if body.document_type is None and body.tax_year is None:
+        raise HTTPException(status_code=400, detail="nothing_to_update")
+    if body.document_type is not None and body.document_type not in _ALLOWED_DOC_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"document_type must be one of {sorted(_ALLOWED_DOC_TYPES)}",
+        )
+    doc = (
+        db.query(ClientDocument)
+        .filter(ClientDocument.id == document_id, ClientDocument.deleted_at.is_(None))
+        .first()
+    )
+    if doc is None:
+        raise HTTPException(status_code=404, detail="document_not_found")
+    _assert_engagement(current_user.id, doc.client_id, db)
+    if body.document_type is not None:
+        doc.document_type = body.document_type
+        doc.status = "classified"
+    if body.tax_year is not None:
+        doc.tax_year = body.tax_year
+    try:
+        db.commit()
+        db.refresh(doc)
+    except Exception as exc:
+        db.rollback()
+        log.error("[vault-reclassify] DB commit failed: %s", exc)
+        raise HTTPException(status_code=500, detail="reclassify_failed")
+    return {"ok": True, "document": _serialize_doc(doc)}

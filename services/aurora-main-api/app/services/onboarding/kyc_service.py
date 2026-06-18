@@ -198,12 +198,20 @@ def init_document_upload(
     db.commit()
     db.refresh(doc)
 
+    # Headers the client MUST send on the PUT. For the GCS backend the v4
+    # signature covers x-goog-content-length-range (= "1,<bytes_size>"); if the
+    # client omits it GCS rejects the upload with MalformedSecurityHeader. The
+    # stub backend's local upload endpoint ignores it.
+    upload_headers = {"Content-Type": mime_type}
+    if (os.getenv("KYC_BACKEND") or "stub").strip().lower() == "gcs":
+        upload_headers["x-goog-content-length-range"] = f"1,{bytes_size}"
+
     return {
         "doc_id": doc.id,
         "upload_url": upload_url,
         "upload_method": "PUT",
         "expires_in": SIGNED_URL_TTL_SECONDS,
-        "headers": {"Content-Type": mime_type},
+        "headers": upload_headers,
     }
 
 

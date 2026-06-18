@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "aurora-lts-prod"
+  },
+  "targets": {
+    "aurora-lts-prod": {
+      "hosting": {
+        "aurora-lts-portal": [
+          "aurora-lts-portal"
+        ]
+      }
+    }
+  }
+}

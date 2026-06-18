@@ -468,7 +468,8 @@ export async function mockUploadManual(
     created_at: now,
     archived_until: archived(now),
   };
-  return { ok: true, document: doc };
+  // Mirror the live backend ManualUploadResponse shape.
+  return { document_id: doc.id, status: doc.status, sha256: doc.sha256, bytes_size: doc.size_bytes };
 }
 
 export async function mockReclassify(

@@ -7,14 +7,14 @@ Provisions the anomaly_events table.
 from __future__ import annotations
 import logging
 from sqlalchemy import inspect, text
-from aurora_shared.database.connection import engine
+from aurora_shared.database.connection import engine, get_engine
 
 log = logging.getLogger(__name__)
 _IS_PG = engine.dialect.name == "postgresql"
 
 
 def run() -> None:
-    inspector = inspect(engine)
+    inspector = inspect(get_engine())  # real Engine — inspect() can't introspect the _LazyEngine proxy
     if "anomaly_events" in inspector.get_table_names():
         log.debug("[phase23] anomaly_events already exists — skipping")
         return

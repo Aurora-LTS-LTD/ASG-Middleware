@@ -7,13 +7,13 @@ Mirrors the ADD COLUMN pattern of migrate_phase26/28.
 from __future__ import annotations
 import logging
 from sqlalchemy import inspect, text
-from aurora_shared.database.connection import engine
+from aurora_shared.database.connection import engine, get_engine
 
 log = logging.getLogger(__name__)
 
 
 def run() -> None:
-    inspector = inspect(engine)
+    inspector = inspect(get_engine())  # real Engine — inspect() can't introspect the _LazyEngine proxy
 
     def _has_column(table: str, col: str) -> bool:
         try:

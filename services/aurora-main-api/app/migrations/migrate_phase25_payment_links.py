@@ -2,14 +2,14 @@
 from __future__ import annotations
 import logging
 from sqlalchemy import inspect, text
-from aurora_shared.database.connection import engine
+from aurora_shared.database.connection import engine, get_engine
 
 log = logging.getLogger(__name__)
 _PG = engine.dialect.name == "postgresql"
 
 
 def run() -> None:
-    if "payment_links" in inspect(engine).get_table_names():
+    if "payment_links" in inspect(get_engine()).get_table_names():
         log.debug("[phase25] payment_links exists")
         return
     log.info("[phase25] creating payment_links")

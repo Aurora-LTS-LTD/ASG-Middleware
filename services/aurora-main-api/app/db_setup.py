@@ -20,11 +20,14 @@ WHY THIS EXISTS:
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 from aurora_shared.database import create_tables
+
+log = logging.getLogger("aurora.db_setup")
 
 _MAX_ATTEMPTS = int(os.getenv("AURORA_DB_SETUP_MAX_ATTEMPTS", "5"))
 _BASE_DELAY_S = float(os.getenv("AURORA_DB_SETUP_BASE_DELAY_S", "2"))
@@ -210,6 +213,36 @@ def run_db_setup() -> None:
         run_phase21_migrations()
     except Exception as e:
         print(f"[STARTUP] Phase 21 migration warning: {e}")
+
+    # ── Phases 21_vault → 30 (app/migrations/ subpackage) ──────────────
+    # These shipped with the P2 feature work but were never wired into the
+    # migration runner, leaving production schema-drifted vs the deployed
+    # models (e.g. users.firm_name missing → /onboarding/start 500s).
+    # Each entrypoint is idempotent (ADD COLUMN / CREATE TABLE IF NOT
+    # EXISTS) and safe to re-run under the advisory lock.
+    try:
+        from app.migrations.migrate_phase21_vault import run_phase21_vault_migrations
+        run_phase21_vault_migrations()
+    except Exception as e:
+        log.error("[db_setup] Phase 21 Vault migration FAILED: %s", e)
+
+    for _phase_mod in (
+        "migrate_phase22_sanctions",
+        "migrate_phase23_anomaly",
+        "migrate_phase24_vat_returns",
+        "migrate_phase25_payment_links",
+        "migrate_phase26_apns_tokens",
+        "migrate_phase27_accountant_password_reset",
+        "migrate_phase28_user_firm_name",
+        "migrate_phase29_invoice_lifecycle_timestamps",
+        "migrate_phase30_audit_export_cursor",
+    ):
+        try:
+            import importlib
+            mod = importlib.import_module(f"app.migrations.{_phase_mod}")
+            mod.run()
+        except Exception as e:
+            log.error("[db_setup] %s migration FAILED: %s", _phase_mod, e)
 
 
 async def run_db_setup_resilient() -> bool:

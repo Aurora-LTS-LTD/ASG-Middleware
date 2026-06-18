@@ -2,6 +2,8 @@
 <html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
+    <script>/* Tauri desktop: relative /api/* resolves against tauri://localhost, so rewrite to the live API. */
+    (function(){var A="https://api-aurora-lts.com",f=window.fetch.bind(window);window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/")===0)u=A+u;return f(u,o);};})();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora LTS — Invoice Dashboard</title>
     <!-- Tailwind compiled locally (was https://cdn.tailwindcss.com — CDN blocked by Tauri webview in production). Brand colors live in tailwind.config.js; rebuild via `npm run build:css`. -->
@@ -52,7 +54,7 @@
 
         <p class="text-center text-xs text-slate-400 mt-6">© 2026 AURORA LTS LTD · v3.0.0-aurora</p>
         <p class="text-center text-xs text-slate-400 mt-1">
-            New here? <a href="./onboarding" class="text-brand-600 hover:underline">Create an account</a>
+            New here? <a href="/onboarding" class="text-brand-600 hover:underline">Create an account</a>
         </p>
     </div>
 </div>
@@ -591,7 +593,8 @@
     }
 
     async function fetchBusinesses() {
-        const res = await authFetch('/api/v1/businesses');
+        // Live M1 API exposes organizations, not "businesses" (legacy path 404s).
+        const res = await authFetch('/api/v1/organizations');
         businesses = await res.json();
     }
 
@@ -743,7 +746,7 @@
         }
         // Show PDF download button for finalized/sent invoices
         if (inv.status === 'finalized' || inv.status === 'sent') {
-            btns += `<a href="./api/v1/pdf/${inv.id}/download?lang=ar" class="text-xs bg-slate-500 hover:bg-slate-600 text-white px-2.5 py-1 rounded transition-colors inline-block" target="_blank">PDF</a>`;
+            btns += `<a href="/api/v1/pdf/${inv.id}/download?lang=ar" class="text-xs bg-slate-500 hover:bg-slate-600 text-white px-2.5 py-1 rounded transition-colors inline-block" target="_blank">PDF</a>`;
         }
         return btns || '<span class="text-xs text-slate-400">-</span>';
     }
