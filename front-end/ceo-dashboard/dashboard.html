@@ -2,8 +2,6 @@
 <html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
-    <script>/* Tauri desktop: relative /api/* resolves against tauri://localhost, so rewrite to the live API. */
-    (function(){var A="https://api-aurora-lts.com",f=window.fetch.bind(window);window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/")===0)u=A+u;return f(u,o);};})();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora LTS — Invoice Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -609,8 +607,7 @@
     }
 
     async function fetchBusinesses() {
-        // Live M1 API exposes organizations, not "businesses" (legacy path 404s).
-        const res = await authFetch('/api/v1/organizations');
+        const res = await authFetch('/api/v1/businesses');
         businesses = await res.json();
     }
 
