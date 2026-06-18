@@ -4,8 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.aurora.ceo-dashboard",
   "build": {
-    "frontendDist": "../ui",
-    "devUrl": "http://localhost:1430"
+    "frontendDist": "../ui"
   },
   "app": {
     "windows": [
