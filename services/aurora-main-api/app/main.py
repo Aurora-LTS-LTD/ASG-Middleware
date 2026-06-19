@@ -49,7 +49,10 @@ from app.routers.marketing import router as marketing_router                 # S
 from app.routers.admin_break_glass import router as admin_break_glass_router # Track 3 — Break-glass JWT lifecycle (IAP-only)
 from app.routers.admin_users import router as admin_users_router             # Track 4 — Admin users + orgs list (feeds aurora-admin-ui)
 from app.routers.admin_exec import router as admin_exec_router               # Appendix H — Tier 1 CEO Executive Dashboard backend
-# native_shell lives in M2 (aurora-api-core) per the monorepo split — not mounted on M1.
+# native_shell is ALSO mounted on M1 (Scope C — AuroraMacShell talks to api-aurora-lts.com,
+# not the M2 .run.app URL). The router file is copied byte-for-byte from M2; both services
+# share the same Aurora DB so handshake state and NativeDeviceKey rows are consistent.
+from app.routers.native_shell import router as native_shell_router           # Sprint 8.2 — Aurora Mac Shell handshake (also mounted on M1)
 from app.routers.accountant_auth import router as accountant_auth_router    # Sprint 8.2 sibling — Accountant Portal auth (Phase 21)
 from app.routers.accountant_dashboard import router as accountant_dashboard_router  # P1-16 — Accountant Portal dashboard KPIs
 from app.routers.accountant_vault import router as accountant_vault_router          # P1-17 — Accountant Portal manual vault upload
@@ -215,7 +218,7 @@ app.include_router(marketing_router)         # Sprint 7 — POST /api/v1/marketi
 app.include_router(admin_break_glass_router) # Track 3 — list + revoke break-glass tokens (IAP-strict)
 app.include_router(admin_users_router)       # Track 4 — admin users + orgs list (consumed by aurora-admin-ui)
 app.include_router(admin_exec_router)        # Appendix H — Tier 1 CEO Executive Dashboard endpoints
-# native_shell_router served by M2 (aurora-api-core), not M1.
+app.include_router(native_shell_router)      # Sprint 8.2 — Aurora Mac Shell handshake + device list/revoke (now mounted on M1 for Scope C)
 app.include_router(accountant_auth_router)   # Sprint 8.2 sibling — Accountant Portal OTP + device mgmt
 app.include_router(accountant_dashboard_router)  # P1-16 — Accountant Portal dashboard KPIs
 app.include_router(accountant_vault_router)      # P1-17 — Accountant Portal manual vault upload

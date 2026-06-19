@@ -438,6 +438,19 @@
     let currentUserName = localStorage.getItem('asg_user_name') || '';
     let currentUserRole = localStorage.getItem('asg_user_role') || '';
 
+    // When the page is hosted inside AuroraMacShell (the native macOS
+    // shell), Swift injects `window.AuroraNative.token` at document-start
+    // with a Secure-Enclave-backed native-session JWT. Adopt it as our
+    // active session so the login screen never renders. The WKWebView's
+    // fetch patch also adds `X-Aurora-Native-Session: <token>` on every
+    // request, so the M1 backend authenticates us via the native path
+    // even if `authToken` (the Bearer JWT) isn't set yet — the existing
+    // /auth/me call below will populate the user info.
+    if (window.AuroraNative && window.AuroraNative.token) {
+        authToken = window.AuroraNative.token;
+        localStorage.setItem('asg_token', authToken);
+    }
+
     // ---------------------------------------------------------
     // AUTH HELPER: Build headers for every API call
     // ---------------------------------------------------------

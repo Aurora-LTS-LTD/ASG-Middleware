@@ -188,11 +188,46 @@ def get_current_user(
     FastAPI dependency: verifies JWT token and returns the User.
     Add Depends(get_current_user) to any endpoint that needs protection.
 
-    Accepts two token classes:
+    Accepts THREE token classes (tried in this order):
+      • X-Aurora-Native-Session JWTs from AuroraMacShell after a Secure
+        Enclave handshake (Sprint 8.2 / Scope C bridge — broadens the
+        native-session scope from step-up-only to also satisfy primary
+        auth on dashboard endpoints, so the WKWebView-hosted dashboard
+        can auto-login without re-prompting the user for a password)
       • Aurora HS256 JWTs (existing — minted by aurora_shared.services.auth_service)
       • Google RS256 OIDC tokens from allowlisted service accounts
         (Track 4 Phase A — service-to-service from aurora-admin-ui)
     """
+
+    # ── Step 0: X-Aurora-Native-Session (AuroraMacShell auto-login) ──
+    # If the request comes from a handshake-verified Mac shell, the JWT
+    # in X-Aurora-Native-Session validates the device + the user. We
+    # accept it as primary auth so the dashboard inside the WKWebView
+    # doesn't need to ALSO collect email+password.
+    #
+    # Sprint 8.2 intentionally scoped native_session JWTs to step-up
+    # only (via require_native_shell). This block deliberately broadens
+    # that to cover dashboard endpoints. The safety trade-off:
+    # a stolen native_session JWT can now read dashboard data — but it
+    # still cannot satisfy require_admin or require_native_shell with
+    # WebAuthn step-up, so the most sensitive operations remain gated.
+    native_claims = _resolve_native_session(request, db)
+    if native_claims:
+        sub = native_claims.get("sub")
+        if sub:
+            try:
+                native_user_id = int(sub)
+            except (TypeError, ValueError):
+                native_user_id = None
+            if native_user_id is not None:
+                native_user = (
+                    db.query(User).filter(User.id == native_user_id).first()
+                )
+                if native_user and native_user.is_active:
+                    return native_user
+        # If native claims were valid but the user lookup failed, fall
+        # through to the Bearer flow so the caller still has a chance
+        # to authenticate via the standard path.
 
     # ── Step 1: Read the Authorization header ──
     auth_header = request.headers.get("Authorization")
