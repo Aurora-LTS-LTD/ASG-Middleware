@@ -56,6 +56,13 @@
                 class="w-full bg-gradient-to-br from-aurora-purple via-aurora-indigo to-aurora-teal text-white py-3 rounded-lg text-sm font-medium shadow-lg shadow-aurora-purple/30 hover:shadow-xl hover:shadow-aurora-purple/50 transition-shadow">
                 Log In
             </button>
+
+            <!-- Touch ID shortcut — hidden by default, revealed at init-time only when enabled on this Mac -->
+            <button onclick="loginWithTouchId()" id="touch-id-btn"
+                class="hidden w-full mt-3 bg-white border border-slate-200 hover:border-aurora-purple/40 text-slate-700 hover:text-aurora-purple py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                <span aria-hidden>🔓</span>
+                <span>Log In with Touch ID</span>
+            </button>
         </div>
 
         <p class="text-center text-xs text-slate-400 mt-6">© 2026 AURORA LTS LTD · v3.0.0-aurora</p>
@@ -486,6 +493,10 @@
             // Switch from login screen to dashboard
             showDashboard();
 
+            // After a successful password login, offer to enable Touch ID
+            // on this Mac (best-effort; silently no-op outside Tauri).
+            maybeOfferTouchId(authToken).catch(err => console.warn('Touch ID setup:', err));
+
         } catch (e) {
             errorEl.textContent = e.message;
             errorEl.classList.remove('hidden');
@@ -496,9 +507,98 @@
     }
 
     // ---------------------------------------------------------
+    // TOUCH ID (Tauri Mac shell — keychain-backed biometric)
+    // ---------------------------------------------------------
+    // The Tauri Rust side exposes 4 IPC commands (src-tauri/src/keychain.rs).
+    // Outside Tauri (e.g., dashboard opened in a plain browser) all of this
+    // silently no-ops and the user just sees email+password.
+    function isTauri() {
+        return typeof window.__TAURI__ !== 'undefined'
+            && typeof window.__TAURI__.core !== 'undefined';
+    }
+    async function invokeTauri(cmd, args) {
+        if (!isTauri()) throw new Error('Touch ID not available');
+        return await window.__TAURI__.core.invoke(cmd, args || {});
+    }
+
+    // One-time prompt offered after a successful password login.
+    async function maybeOfferTouchId(token) {
+        if (!isTauri()) return;
+        const alreadyEnabled = await invokeTauri('is_touch_id_enabled');
+        if (alreadyEnabled) return;
+        if (localStorage.getItem('touch_id_dismissed')) return;
+
+        if (confirm('Enable Touch ID for faster sign-in next time?')) {
+            try {
+                await invokeTauri('enable_touch_id', { token });
+                showToast('Touch ID enabled', 'success');
+                document.getElementById('touch-id-btn').classList.remove('hidden');
+            } catch (e) {
+                console.warn('enable_touch_id failed:', e);
+                showToast('Failed to enable Touch ID', 'error');
+            }
+        } else {
+            localStorage.setItem('touch_id_dismissed', 'true');
+        }
+    }
+
+    // Touch ID shortcut button handler.
+    async function loginWithTouchId() {
+        if (!isTauri()) return;
+        const btn = document.getElementById('touch-id-btn');
+        const errorEl = document.getElementById('login-error');
+        errorEl.classList.add('hidden');
+        btn.disabled = true;
+        const originalLabel = btn.innerHTML;
+        btn.innerHTML = '<span>Authenticating…</span>';
+
+        try {
+            // This call triggers the macOS Touch ID prompt at the OS level
+            // (because the keychain entry was stored with kSecAccessControlBiometryAny).
+            const token = await invokeTauri('login_with_touch_id');
+
+            // Hydrate user info from the token before showing the dashboard.
+            const res = await fetch('/api/v1/auth/me', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) {
+                // Token in keychain is stale (24h JWT expired, or user disabled
+                // server-side). Wipe it and fall back to password login.
+                invokeTauri('disable_touch_id').catch(() => {});
+                btn.classList.add('hidden');
+                throw new Error('Stored credential expired — please log in with password.');
+            }
+            const user = await res.json();
+
+            authToken = token;
+            currentUserName = user.full_name;
+            currentUserRole = user.role;
+            localStorage.setItem('asg_token', authToken);
+            localStorage.setItem('asg_user_name', currentUserName);
+            localStorage.setItem('asg_user_role', currentUserRole);
+
+            showDashboard();
+        } catch (e) {
+            errorEl.textContent = e.message || String(e);
+            errorEl.classList.remove('hidden');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalLabel;
+        }
+    }
+
+    // ---------------------------------------------------------
     // LOGOUT
     // ---------------------------------------------------------
     function doLogout() {
+        // Best-effort: wipe the biometric-gated keychain entry too. Logging
+        // out fully clears the device of credentials. Touch ID must be
+        // re-enabled after the next password login.
+        if (isTauri()) {
+            invokeTauri('disable_touch_id').catch(() => {});
+        }
+        localStorage.removeItem('touch_id_dismissed');
+
         // Clear everything and show login screen
         authToken = null;
         currentUserName = '';
@@ -510,6 +610,11 @@
         document.getElementById('app-layout').classList.add('hidden');
         document.getElementById('login-screen').classList.remove('hidden');
         document.getElementById('login-password').value = '';
+
+        // Hide the Touch ID shortcut button — it'll re-appear once the user
+        // logs back in with password and accepts the Touch ID prompt again.
+        const tidBtn = document.getElementById('touch-id-btn');
+        if (tidBtn) tidBtn.classList.add('hidden');
     }
 
     // ---------------------------------------------------------
@@ -1015,6 +1120,18 @@
     // ---------------------------------------------------------
     // INIT: Check if already logged in
     // ---------------------------------------------------------
+    // On page load, surface the Touch ID button if a keychain entry exists
+    // on this Mac. Silently no-ops outside Tauri.
+    (async function revealTouchIdButtonIfEnabled() {
+        if (!isTauri()) return;
+        try {
+            const enabled = await invokeTauri('is_touch_id_enabled');
+            if (enabled) document.getElementById('touch-id-btn').classList.remove('hidden');
+        } catch (e) {
+            console.warn('is_touch_id_enabled probe failed:', e);
+        }
+    })();
+
     // On page load, check if there's a stored token.
     // If yes, skip login screen and go straight to dashboard.
     // If no, show the login screen.

@@ -66,7 +66,7 @@ IDs that won't pass an ITA audit.
 
 | External credential | Where it plugs in | Today's state | Flip to |
 |---|---|---|---|
-| **Apple Developer ID** | local Keychain on the Mac that builds CEO Dashboard `.dmg` | no cert | active membership ($99/yr) |
+| **C** | local Keychain on the Mac that builds CEO Dashboard `.dmg` | no cert | active membership ($99/yr) |
 | **App-specific Apple ID password** | local env at build time | none | created at appleid.apple.com → App-Specific Passwords |
 | **Windows Authenticode cert** | local cert store on the Windows machine that builds Accountant `.msi` | no cert | OV or EV cert from a CA |
 

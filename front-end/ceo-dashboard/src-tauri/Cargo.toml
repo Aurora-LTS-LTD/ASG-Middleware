@@ -23,3 +23,18 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.2", features = [] }
 tauri-plugin-log = "2"
+
+# macOS-only Touch ID + Keychain bindings (used by src/keychain.rs).
+# `security-framework` is the Rust wrapper around macOS Security.framework;
+# `core-foundation` is needed for the CF*Ref types its API consumes.
+#
+# IMPORTANT: pin core-foundation to 0.9.x so the TCFType trait identity
+# matches the one security-framework 2.x uses internally. core-foundation
+# 0.10 ships an incompatible (technically the same code, but identified as
+# a different trait by the compiler) TCFType — methods like as_CFTypeRef()
+# on SecAccessControl become unresolvable across the version boundary.
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "2"
+security-framework-sys = "2"
+core-foundation = "0.9"
+core-foundation-sys = "0.8"
