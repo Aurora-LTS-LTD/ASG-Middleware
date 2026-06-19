@@ -172,6 +172,13 @@ _cors_origins = [
     "https://portal.api-aurora-lts.com",   # portal download/landing page
     "tauri://localhost",                    # Tauri renderer on macOS + Linux
     "https://tauri.localhost",              # Tauri renderer on Windows
+    # AuroraMacShell — the native macOS shell loads dashboard.html from
+    # the .app bundle via file://, which the browser reports as
+    # `Origin: null`. Risk is bounded: every request still requires a
+    # valid JWT (or X-Aurora-Native-Session) signed by our key, so a
+    # null-origin page without credentials can only hit unauthenticated
+    # endpoints (already public by design).
+    "null",
 ]
 # Local development only: the Next dev server (3000) + Tauri dev origin (1420).
 # Never added under cloud_run — production stays on the explicit allowlist above.
@@ -191,6 +198,13 @@ app.add_middleware(
         "Accept",            # browser defaults
         "Origin",
         "X-Requested-With",
+        # AuroraMacShell injects these on every fetch from inside the
+        # WKWebView. Without listing them here, the CORS preflight
+        # strips them and the backend can't authenticate the request.
+        "X-Aurora-Native-Session",
+        "X-Aurora-Device-Id",
+        "X-Aurora-Native-Shell",
+        "X-Aurora-Shell-Version",
     ],
     max_age=600,  # cache preflight 10 minutes
 )
