@@ -1,0 +1,21 @@
+{
+  "name": "aurora-ceo-dashboard-v3",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "description": "Aurora LTS CEO Command Center v3 — modular SPA hosted inside AuroraMacShell (thin shell). All data via M1 Admin APIs.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^3.1.2",
+    "svelte": "^4.2.19",
+    "vite": "^5.4.10",
+    "vite-plugin-singlefile": "^2.0.3"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.6"
+  }
+}

@@ -123,6 +123,7 @@ def create_access_token(
     primary_org_id: int | None = None,
     accountant_of: list[int] | None = None,
     expires_hours: int | None = None,
+    must_change_password: bool | None = None,
 ) -> str:
     """
     Create a signed JWT token for a user.
@@ -165,6 +166,11 @@ def create_access_token(
         payload["poi"] = primary_org_id
     if accountant_of is not None:
         payload["aco"] = accountant_of
+    # Read hint only — enforcement always re-reads User.must_change_password
+    # from the DB (fast claims, slow truth). A stale token can never *grant*
+    # access; the DB column is authoritative.
+    if must_change_password:
+        payload["mcp"] = True
 
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return token

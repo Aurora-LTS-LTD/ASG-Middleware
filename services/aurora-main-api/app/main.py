@@ -49,6 +49,10 @@ from app.routers.marketing import router as marketing_router                 # S
 from app.routers.admin_break_glass import router as admin_break_glass_router # Track 3 — Break-glass JWT lifecycle (IAP-only)
 from app.routers.admin_users import router as admin_users_router             # Track 4 — Admin users + orgs list (feeds aurora-admin-ui)
 from app.routers.admin_exec import router as admin_exec_router               # Appendix H — Tier 1 CEO Executive Dashboard backend
+from app.routers.admin_overview import router as admin_overview_router       # v3.0 — CEO Command Center: overview + finance
+from app.routers.admin_system import router as admin_system_router           # v3.0 — system health + non-secret config
+from app.routers.admin_customers import router as admin_customers_router     # v3.0 — customers/360/pilot + suspend/archive/notes
+from app.routers.admin_audit import router as admin_audit_router            # v3.0 — admin audit event read API
 # native_shell is ALSO mounted on M1 (Scope C — AuroraMacShell talks to api-aurora-lts.com,
 # not the M2 .run.app URL). The router file is copied byte-for-byte from M2; both services
 # share the same Aurora DB so handshake state and NativeDeviceKey rows are consistent.
@@ -232,6 +236,10 @@ app.include_router(marketing_router)         # Sprint 7 — POST /api/v1/marketi
 app.include_router(admin_break_glass_router) # Track 3 — list + revoke break-glass tokens (IAP-strict)
 app.include_router(admin_users_router)       # Track 4 — admin users + orgs list (consumed by aurora-admin-ui)
 app.include_router(admin_exec_router)        # Appendix H — Tier 1 CEO Executive Dashboard endpoints
+app.include_router(admin_overview_router)    # v3.0 — CEO Command Center overview + finance summary
+app.include_router(admin_system_router)      # v3.0 — system health + non-secret config
+app.include_router(admin_customers_router)   # v3.0 — customers/360/pilot + suspend/archive/notes
+app.include_router(admin_audit_router)       # v3.0 — admin audit event read API
 app.include_router(native_shell_router)      # Sprint 8.2 — Aurora Mac Shell handshake + device list/revoke (now mounted on M1 for Scope C)
 app.include_router(accountant_auth_router)   # Sprint 8.2 sibling — Accountant Portal OTP + device mgmt
 app.include_router(accountant_dashboard_router)  # P1-16 — Accountant Portal dashboard KPIs

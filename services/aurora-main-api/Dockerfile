@@ -60,6 +60,9 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 # M1 application package + the bundled front-end UI.
 COPY services/aurora-main-api/app /app/app
 COPY front-end/ceo-dashboard /app/front-end/ceo-dashboard
+# Provisioning/maintenance scripts (run by Cloud Run Jobs, e.g. admin
+# bootstrap). Previously omitted, so job images lacked scripts/*.py.
+COPY services/aurora-main-api/scripts /app/scripts
 
 RUN chown -R aurora:aurora /app
 EXPOSE 8080

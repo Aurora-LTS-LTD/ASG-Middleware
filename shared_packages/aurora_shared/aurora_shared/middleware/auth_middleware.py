@@ -273,6 +273,42 @@ def get_current_user(
 
 
 # -----------------------------------------------------------------
+# FORCED PASSWORD ROTATION GATE
+# -----------------------------------------------------------------
+# A user provisioned with a temporary/bootstrap password carries
+# User.must_change_password == True. Until they rotate it via
+# POST /api/v1/auth/change-password, they must not be able to do anything
+# else — in particular they must NOT be able to enrol a device or mint a
+# native session (the native shell's handshake). This is the AUTHORITATIVE,
+# server-side enforcement; the desktop UI gate is mere convenience.
+#
+# Deliberately NOT folded into get_current_user(): doing so would also block
+# /auth/me and /auth/change-password — the exact two endpoints the user needs
+# while in the must-reset state — and would ripple unpredictably across every
+# M1/M2 endpoint. Apply this surgically where it matters instead.
+#
+# Always re-reads the DB column (never trusts the `mcp` JWT claim).
+def assert_password_reset_complete(user: User) -> None:
+    """Raise 403 if the user still owes a forced password rotation."""
+    if getattr(user, "must_change_password", False):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "password_reset_required",
+                "message": "You must change your temporary password before continuing.",
+            },
+        )
+
+
+def require_password_reset_complete(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """FastAPI dependency form of `assert_password_reset_complete`."""
+    assert_password_reset_complete(current_user)
+    return current_user
+
+
+# -----------------------------------------------------------------
 # FUNCTION: get_business_filter
 # -----------------------------------------------------------------
 # PURPOSE:

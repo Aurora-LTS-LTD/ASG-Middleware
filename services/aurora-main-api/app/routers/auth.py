@@ -21,7 +21,7 @@ SECURITY NOTES:
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from aurora_shared.database import get_db, User
@@ -52,6 +52,10 @@ class LoginResponse(BaseModel):
     role: str
     full_name: str
     user_id: int
+    # True when the user signed in with a temporary/bootstrap password and
+    # must set a new one before continuing. The client routes to its
+    # "set new password" screen and blocks everything else until done.
+    must_change_password: bool = False
 
 
 class RegisterRequest(BaseModel):
@@ -112,10 +116,15 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         raise HTTPException(status_code=401, detail="Account is disabled")
 
     # ── Step 4: Create JWT token ──
+    # Login SUCCEEDS even with a temporary password — the forced rotation is
+    # enforced downstream (the change-password endpoint clears the flag; the
+    # native handshake is refused while it's set). We just surface the flag.
+    must_change = bool(getattr(user, "must_change_password", False))
     token = create_access_token(
         user_id=user.id,
         role=user.role,
         business_id=user.business_id,
+        must_change_password=must_change,
     )
 
     print(f"[AUTH] Login successful: {user.email} (role: {user.role})")
@@ -126,6 +135,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         "role": user.role,
         "full_name": user.full_name,
         "user_id": user.id,
+        "must_change_password": must_change,
     }
 
 
@@ -252,4 +262,81 @@ def get_me(current_user: User = Depends(get_current_user)):
         "business_id": current_user.business_id,
         "is_active": current_user.is_active,
         "language_pref": current_user.language_pref,
+        "must_change_password": bool(getattr(current_user, "must_change_password", False)),
     }
+
+
+# =================================================================
+# ENDPOINT 4: POST /api/v1/auth/change-password -- Rotate Password
+# =================================================================
+# Authenticated password change. The temporary/bootstrap password forces a
+# rotation on first login (see User.must_change_password) — this is the ONLY
+# endpoint that clears that flag. Mirrors the accountant portal's
+# change-password (accountant_auth.py) but for M1 admin/owner users.
+#
+# Admin password rule is 12+ chars (matches scripts/bootstrap_admin.py),
+# stricter than the accountant portal's 10.
+MIN_ADMIN_PASSWORD_LENGTH = 12
+
+
+def _validate_admin_password(v: str) -> str:
+    v = v or ""
+    if len(v) < MIN_ADMIN_PASSWORD_LENGTH:
+        raise ValueError(
+            f"Password must be at least {MIN_ADMIN_PASSWORD_LENGTH} characters"
+        )
+    if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
+        raise ValueError("Password must contain at least one letter and one number")
+    return v
+
+
+class ChangePasswordRequest(BaseModel):
+    """Rotate the signed-in user's password."""
+    old_password: str = Field(..., min_length=1, max_length=200)
+    new_password: str = Field(..., min_length=MIN_ADMIN_PASSWORD_LENGTH, max_length=200)
+
+    @field_validator("new_password")
+    @classmethod
+    def _pw_strength(cls, v: str) -> str:
+        return _validate_admin_password(v)
+
+
+@router.post("/change-password")
+@limiter.limit("5/minute")
+def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Verify the current password, set a new one, and clear the
+    must_change_password flag. Authenticated via the Bearer JWT the client
+    received from /login — including the temporary-password session, which
+    is exactly why this endpoint is NOT behind the force-reset gate.
+    """
+    # ── Verify the current password ──
+    if not verify_password(payload.old_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "invalid_credentials",
+                    "message": "Current password is incorrect"},
+        )
+
+    # ── Reject a no-op rotation (new must differ from old) ──
+    if payload.new_password == payload.old_password:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "password_unchanged",
+                    "message": "New password must be different from the current one"},
+        )
+
+    # ── Rotate + clear the forced-reset flag (the temp password dies here) ──
+    current_user.password_hash = hash_password(payload.new_password)
+    current_user.must_change_password = False
+    db.commit()
+
+    # Never log the password — only that a rotation happened.
+    print(f"[AUTH] Password changed: {current_user.email} (role: {current_user.role})")
+
+    return {"ok": True}

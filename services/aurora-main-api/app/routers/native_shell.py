@@ -79,6 +79,7 @@ from aurora_shared.database.models import (
 from aurora_shared.middleware.auth_middleware import (
     require_admin,
     _resolve_native_session,
+    assert_password_reset_complete,
 )
 from aurora_shared.services.webauthn_service import require_step_up
 
@@ -99,9 +100,12 @@ router = APIRouter(
 # hours later from a different machine.
 CHALLENGE_TTL_SECONDS = 60
 
-# 15-minute session JWT TTL — matches what the shell's
-# NativeHandshake.swift expects to re-handshake every 14 minutes.
-SESSION_JWT_TTL_SECONDS = 900
+# Session JWT TTL. Default 8h so the CEO Dashboard isn't re-prompting Touch ID
+# every few minutes mid-session. Override via NATIVE_SESSION_TTL_SECONDS.
+# The token is device-bound and revocable: _resolve_native_session re-checks
+# the NativeDeviceKey row (revoked_at IS NULL) on EVERY request, so a longer
+# TTL doesn't widen the blast radius of a revoked device.
+SESSION_JWT_TTL_SECONDS = int(os.getenv("NATIVE_SESSION_TTL_SECONDS", str(8 * 3600)))
 
 # The distinct `iss` claim makes session JWTs unforgeable as regular
 # Aurora JWTs even if both share JWT_SIGNING_KEY — the middleware
@@ -460,6 +464,10 @@ def handshake_start(
     """
     _ = _signing_key()  # fail-fast if signing key unconfigured
     current_user = _resolve_handshake_actor(request, body.device_id, db)
+    # Block device enrolment while a temp password is unrotated — a
+    # must-reset admin cannot obtain a native session, so cannot reach the
+    # dashboard, until they change their password. (Authoritative gate.)
+    assert_password_reset_complete(current_user)
 
     challenge_bytes = secrets.token_bytes(32)
     challenge_id = str(uuid.uuid4())
@@ -522,6 +530,9 @@ def handshake_finish(
     """
     signing_key = _signing_key()
     current_user = _resolve_handshake_actor(request, body.device_id, db)
+    # Same forced-reset gate as /handshake/start — refuse to mint a session
+    # JWT for an admin who still owes a password rotation.
+    assert_password_reset_complete(current_user)
 
     # 1-3 — challenge state
     challenge = (

@@ -281,6 +281,17 @@ class User(Base):
     is_active = Column(Boolean, default=True)       # Can be disabled without deleting
     language_pref = Column(String, default="ar")     # "ar" | "he" | "en"
 
+    # ── Forced password rotation (CEO Dashboard bootstrap) ──
+    # When True, the user logged in with a temporary/bootstrap password and
+    # MUST set a new one before doing anything else. Enforced server-side:
+    # /auth/change-password is the only path that clears it, and the native
+    # shell's device-enrolment handshake is refused while it is True.
+    # Additive, nullable=False + server_default so existing rows backfill to
+    # False; only aurora-main-api auth reads it (M2 ignores it).
+    must_change_password = Column(
+        Boolean, nullable=False, server_default=sa_text("false"), default=False
+    )
+
     # ── Onboarding & Verification (Sprint 1 / Onboarding Module) ──
     # Tracks the multi-step web onboarding journey. Read by both the onboarding
     # router and the WhatsApp ONBOARDING:* FSM so a user can resume across surfaces.
@@ -564,6 +575,15 @@ class Organization(Base):
         unique=True,
         default=lambda: str(uuid.uuid4())[:12],
     )
+
+    # ── CEO Command Center (v3.0) ──
+    # Soft-delete marker: set when an admin archives a customer instead of
+    # hard-deleting (preserves audit + 7y retention). NULL = not archived.
+    archived_at = Column(DateTime, nullable=True)
+    # Manual cohort flag for the pilot program (the 10-business pilot board).
+    # "Paying" is derived from an active Subscription; "pilot" is a deliberate
+    # designation, so it gets its own flag.
+    is_pilot = Column(Boolean, default=False, server_default=sa_text("false"), nullable=False)
 
     # ── Migration Bridge (Expand/Contract) ──
     # Pointer to the legacy Business row this Organization was backfilled from.
@@ -3565,4 +3585,115 @@ class PaymentLink(Base):
 
     __table_args__ = (
         Index("ix_payment_links_invoice_status", "invoice_id", "status"),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# CEO COMMAND CENTER (v3.0) — admin operations, audit, analytics, RBAC
+# ═══════════════════════════════════════════════════════════════
+# These power the AuroraMacShell CEO Dashboard v3 admin modules. They are
+# written ONLY by backend Admin APIs (the Mac app holds no logic). See
+# services/aurora-main-api/app/routers/admin_*.py.
+
+class CustomerNote(Base):
+    """Pilot-Operations note + next action against a customer (Organization).
+
+    Lets the founder track 'who is stuck / what's the next step' per business
+    during the pilot. Append-style; `is_resolved` closes an item.
+    """
+    __tablename__ = "customer_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    body = Column(String, nullable=False)
+    next_action = Column(String, nullable=True)
+    is_resolved = Column(Boolean, default=False, server_default=sa_text("false"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
+class AdminAuditEvent(Base):
+    """Structured audit of every admin (CEO Dashboard) mutation.
+
+    Distinct from ActionLog (durable business ops) + ItaAuditLog (tax binder)
+    + ExecEvent (transient alert feed): this captures WHO did WHAT to WHICH
+    entity, with before/after snapshots, for compliance + the Audit module.
+    Append-only by convention (only Admin APIs write it).
+    """
+    __tablename__ = "admin_audit_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    actor_role = Column(String, nullable=True)
+    action = Column(String, nullable=False)               # e.g. "customer.suspend"
+    entity_type = Column(String, nullable=True)           # e.g. "organization"
+    entity_id = Column(String, nullable=True)             # stringified id (cross-entity)
+    before_json = Column(JSON, nullable=True)
+    after_json = Column(JSON, nullable=True)
+    ip_hash = Column(String, nullable=True)               # SHA-256 of client IP (never raw)
+    device = Column(String, nullable=True)                # shell/device label, non-PII
+    severity = Column(String, default="info", nullable=False)  # info | warning | critical
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_admin_audit_entity", "entity_type", "entity_id"),
+    )
+
+
+class AnalyticsEvent(Base):
+    """Product/business event stream for metrics, funnels + (later) Copilot.
+
+    Emitted via aurora_shared.services.analytics_service.emit_event(...) at key
+    backend moments. Exported daily to BigQuery via the existing audit cursor
+    pipeline. NOT for compliance (that's AdminAuditEvent) — this is BI.
+    """
+    __tablename__ = "analytics_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String, nullable=False, index=True)   # signup | kyc_approved | payment_succeeded | ...
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    actor = Column(String, nullable=True)                     # "system" | "admin" | "user"
+    properties_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+
+
+# ── RBAC scaffolding (schema in v3.0; enforcement is later) ──────────
+# The dependency `require_permission(module, action)` resolves "admin ⇒ all"
+# today, but these tables let us add Support / Finance / Sales / Operations /
+# Viewer roles later as DATA, without an endpoint refactor.
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String, unique=True, nullable=False)    # super_admin | admin | support | finance | ...
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    is_system = Column(Boolean, default=False, server_default=sa_text("false"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    module = Column(String, nullable=False)              # customers | finance | system | audit | ...
+    action = Column(String, nullable=False)              # read | create | update | suspend | archive | ...
+    description = Column(String, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("module", "action", name="uq_permission_module_action"),
+    )
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False, index=True)
+    permission_id = Column(Integer, ForeignKey("permissions.id"), nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("role_id", "permission_id", name="uq_role_permission"),
     )

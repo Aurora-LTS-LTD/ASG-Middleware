@@ -201,6 +201,30 @@ steps:
       - "--project=${_PROJECT}"
       - "--update-tags=${_STABLE_TAG}=LATEST"   # move stable tag to new revision
 
+  # ─────────────────────────────────────────────────────────────────
+  # 9. Prune stale revisions. CRITICAL on db-f1-micro: every revision is
+  #    minScale=1, so each old 0%-traffic revision keeps a warm instance
+  #    holding a DB connection pool. Left unpruned they exhaust aurora-pg's
+  #    ~22 connection slots → `FATAL: remaining connection slots reserved`
+  #    (breaks new migrations + the live service). Keep the 2 newest; delete
+  #    the rest. Never fail the build on a prune hiccup.
+  # ─────────────────────────────────────────────────────────────────
+  - id: prune-old-revisions
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: [tag-stable]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set +e
+        OLD=$$(gcloud run revisions list --service=${_SERVICE} --region=${_REGION} --project=${_PROJECT} \
+                 --format='value(metadata.name)' --sort-by=~metadata.creationTimestamp | tail -n +3)
+        for r in $$OLD; do
+          echo "Pruning stale revision $$r"
+          gcloud run revisions delete "$$r" --region=${_REGION} --project=${_PROJECT} --quiet || true
+        done
+        echo "Prune complete."
+
 
 # Artifact Registry records both tags.
 images:

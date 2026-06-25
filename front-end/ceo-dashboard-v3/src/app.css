@@ -1,0 +1,89 @@
+:root {
+  --ink-900: #070912;
+  --ink-850: #0a0d1e;
+  --ink-800: #11142a;
+  --panel: rgba(255, 255, 255, 0.04);
+  --panel-border: rgba(255, 255, 255, 0.09);
+  --text: #e7eaf3;
+  --muted: #8a90a6;
+  --brand: #7c3aed;
+  --teal: #14b8a6;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --err: #f87171;
+  --muted-dot: #64748b;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: linear-gradient(135deg, var(--ink-900), var(--ink-850));
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", Segoe UI, sans-serif;
+}
+#app { height: 100vh; }
+
+.layout { display: flex; height: 100vh; }
+.sidebar {
+  width: 232px; flex-shrink: 0; background: rgba(0,0,0,0.25);
+  border-right: 1px solid var(--panel-border); padding: 18px 12px; display: flex; flex-direction: column;
+}
+.brand { font-size: 18px; font-weight: 700; padding: 6px 10px; }
+.brand small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+.nav { margin-top: 14px; flex: 1; }
+.nav button {
+  width: 100%; text-align: left; background: none; border: 0; color: var(--muted);
+  padding: 9px 12px; border-radius: 9px; font-size: 13.5px; cursor: pointer; margin-bottom: 2px;
+}
+.nav button:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+.nav button.active { color: #fff; background: rgba(124,58,237,0.22); }
+.nav button.disabled { color: #4b5163; cursor: not-allowed; }
+.nav .tag { float: right; font-size: 10px; color: var(--muted); }
+
+.main { flex: 1; overflow: auto; padding: 26px 30px; }
+h1 { font-size: 22px; margin: 0 0 18px; }
+h2 { font-size: 15px; margin: 22px 0 10px; color: var(--text); }
+
+.grid { display: grid; gap: 16px; }
+.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.cols-2 { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 1100px) { .cols-4 { grid-template-columns: repeat(2,1fr);} }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 14px; padding: 16px;
+}
+.kpi .label { color: var(--muted); font-size: 12px; }
+.kpi .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
+.kpi .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--panel-border); }
+td { padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }
+tr:hover td { background: rgba(255,255,255,0.02); }
+
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.pill.ok { background: rgba(52,211,153,0.16); color: var(--ok); }
+.pill.warn { background: rgba(251,191,36,0.16); color: var(--warn); }
+.pill.err { background: rgba(248,113,113,0.16); color: var(--err); }
+.pill.muted { background: rgba(148,163,184,0.16); color: var(--muted); }
+
+button.btn { background: var(--brand); color: #fff; border: 0; padding: 8px 14px; border-radius: 9px; font-size: 13px; cursor: pointer; }
+button.btn.ghost { background: rgba(255,255,255,0.06); }
+button.btn.danger { background: rgba(248,113,113,0.18); color: var(--err); }
+button.btn:disabled { opacity: 0.5; cursor: default; }
+input, select, textarea {
+  width: 100%; background: rgba(0,0,0,0.25); border: 1px solid var(--panel-border);
+  color: var(--text); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+}
+label { font-size: 12px; color: var(--muted); display: block; margin: 8px 0 4px; }
+.row { display: flex; gap: 10px; align-items: center; }
+.muted { color: var(--muted); }
+.err-banner { background: rgba(248,113,113,0.12); color: var(--err); padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; }
+.placeholder { color: var(--muted); font-size: 12px; font-style: italic; }
+.spinner { color: var(--muted); padding: 30px; text-align: center; }
+
+/* modal */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal { width: min(560px, 92vw); max-height: 88vh; overflow: auto; }
