@@ -27,16 +27,25 @@ def emit_event(
     actor: str = "system",
     properties: Optional[dict] = None,
 ) -> None:
-    """Best-effort append of a business/product event. Never raises."""
+    """Best-effort append of a business/product event.
+
+    Never raises AND never poisons the caller's transaction: the insert runs
+    inside a SAVEPOINT (``begin_nested``), so a failure (e.g. a foreign-key
+    violation when the referenced organization is not yet committed) rolls back
+    ONLY this event — the caller's primary write stays intact and committable.
+    Before this guard, a swallowed flush error left the SQLAlchemy session in a
+    failed-transaction state and the caller's next ``db.commit()`` raised
+    PendingRollbackError → HTTP 500.
+    """
     try:
-        db.add(AnalyticsEvent(
-            event_type=event_type,
-            organization_id=organization_id,
-            user_id=user_id,
-            actor=actor,
-            properties_json=properties,
-            created_at=datetime.datetime.utcnow(),
-        ))
-        db.flush()
+        with db.begin_nested():          # SAVEPOINT — isolates this best-effort write
+            db.add(AnalyticsEvent(
+                event_type=event_type,
+                organization_id=organization_id,
+                user_id=user_id,
+                actor=actor,
+                properties_json=properties,
+                created_at=datetime.datetime.utcnow(),
+            ))
     except Exception as e:
         log.warning("[analytics] emit_event(%s) failed (ignored): %s", event_type, e)

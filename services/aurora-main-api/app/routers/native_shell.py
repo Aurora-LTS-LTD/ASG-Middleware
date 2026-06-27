@@ -489,7 +489,10 @@ def handshake_start(
     except Exception as e:
         db.rollback()
         log.error("[native/handshake/start] DB commit failed: %s", e)
-        raise HTTPException(500, detail={"error": "db_commit_failed"})
+        raise HTTPException(503, detail={
+            "error": "database_unavailable",
+            "message": "Could not persist the request — the service is briefly unavailable. Please retry in a moment.",
+        })
 
     log.info(
         "[native/handshake/start] user_id=%s device_hint=%s… challenge_id=%s",
@@ -663,7 +666,10 @@ def handshake_finish(
     except Exception as e:
         db.rollback()
         log.error("[native/handshake/finish] DB commit failed: %s", e)
-        raise HTTPException(500, detail={"error": "db_commit_failed"})
+        raise HTTPException(503, detail={
+            "error": "database_unavailable",
+            "message": "Could not persist the request — the service is briefly unavailable. Please retry in a moment.",
+        })
 
     # Mint session JWT — HS256 with the same JWT_SIGNING_KEY as regular
     # Aurora JWTs, but a distinct `iss` so the middleware can't confuse
@@ -805,7 +811,10 @@ def revoke_device(
     except Exception as e:
         db.rollback()
         log.error("[native/devices/revoke] DB commit failed: %s", e)
-        raise HTTPException(500, detail={"error": "db_commit_failed"})
+        raise HTTPException(503, detail={
+            "error": "database_unavailable",
+            "message": "Could not persist the request — the service is briefly unavailable. Please retry in a moment.",
+        })
 
     log.warning(
         "[native/devices/revoke] user_id=%s device_id=%s… reason=%s",

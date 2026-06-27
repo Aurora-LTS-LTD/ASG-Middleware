@@ -7,7 +7,7 @@
   let showCreate = false, creating = false, createErr = null;
   let form = { display_name: "", legal_structure: "osek_patur", tax_id: "", business_email: "", is_pilot: true };
 
-  let detail = null, detailLoading = false, actionMsg = null;
+  let detail = null, detailLoading = false, actionMsg = null, timeline = [];
 
   async function load() {
     loading = true; error = null;
@@ -33,10 +33,29 @@
   }
 
   async function open(id) {
-    detailLoading = true; detail = null; actionMsg = null;
-    try { detail = await api.customer(id); }
+    detailLoading = true; detail = null; actionMsg = null; timeline = [];
+    try {
+      detail = await api.customer(id);
+      try { timeline = (await api.timeline(id)).timeline; } catch (_) { timeline = []; }
+    }
     catch (e) { actionMsg = e.message; }
     finally { detailLoading = false; }
+  }
+
+  async function kycApprove() {
+    if (!confirm("Approve KYC for this customer?")) return;
+    try { await api.kycApprove(detail.id); actionMsg = "KYC approved."; await open(detail.id); await load(); }
+    catch (e) { actionMsg = e.message; }
+  }
+  async function kycReject() {
+    const r = prompt("Rejection reason:"); if (!r) return;
+    try { await api.kycReject(detail.id, r); actionMsg = "KYC rejected."; await open(detail.id); await load(); }
+    catch (e) { actionMsg = e.message; }
+  }
+  async function kycRequestDocs() {
+    const msg = prompt("What documents do you need from the customer?"); if (!msg) return;
+    try { await api.kycRequestDocs(detail.id, msg); actionMsg = "Documents requested."; await open(detail.id); }
+    catch (e) { actionMsg = e.message; }
   }
 
   async function doSuspend() {
@@ -132,6 +151,17 @@
           <div class="panel kpi"><div class="label">Invoices</div><div class="value" style="font-size:15px">{detail.invoices.count}</div><div class="sub">outstanding ₪{detail.invoices.outstanding}</div></div>
         </div>
 
+        <h2>KYC</h2>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <span class="pill {kycPill(detail.kyc_status)}">{detail.kyc_status}</span>
+          {#if detail.kyc_status !== 'approved'}<button class="btn ghost" on:click={kycApprove}>Approve</button>{/if}
+          {#if detail.kyc_status !== 'rejected'}<button class="btn ghost" on:click={kycReject}>Reject</button>{/if}
+          <button class="btn ghost" on:click={kycRequestDocs}>Request docs</button>
+        </div>
+        {#if detail.kyc_documents.length}
+          <div class="muted" style="font-size:12px;margin-top:6px">{detail.kyc_documents.length} doc(s): {detail.kyc_documents.map(d => d.document_type + ' (' + d.status + ')').join(', ')}</div>
+        {/if}
+
         <h2>Owner & integrations</h2>
         <div class="muted" style="font-size:13px">
           {detail.owner.full_name || "—"} · {detail.owner.email || "—"}<br/>
@@ -147,6 +177,18 @@
           <input placeholder="Next action…" bind:value={noteAction} style="max-width:180px" />
           <button class="btn ghost" on:click={addNote}>Add</button>
         </div>
+
+        <h2>Timeline</h2>
+        {#if !timeline.length}<div class="placeholder">No activity yet.</div>
+        {:else}
+          <div style="max-height:180px;overflow:auto">
+            {#each timeline as t}
+              <div class="row" style="justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px">
+                <span><span class="muted">[{t.kind}]</span> {t.summary}</span><span class="muted">{dt(t.at)}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
 
         <div class="row" style="justify-content:flex-end;margin-top:18px;gap:8px">
           <button class="btn ghost" on:click={() => (detail = null)}>Close</button>

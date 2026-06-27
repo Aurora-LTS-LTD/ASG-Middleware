@@ -69,4 +69,15 @@ export const api = {
   // Pilot + audit
   pilot: () => request("/api/v1/admin/pilot"),
   auditEvents: (qs = "") => request("/api/v1/admin/audit/events" + (qs ? "?" + qs : "")),
+  // v3.1 — KYC actions + timeline
+  kycApprove: (id, stepUp) => request(`/api/v1/admin/customers/${id}/kyc/approve`, { method: "POST", stepUp }),
+  kycReject: (id, reason, stepUp) => request(`/api/v1/admin/customers/${id}/kyc/reject`, { method: "POST", body: { reason }, stepUp }),
+  kycRequestDocs: (id, message) => request(`/api/v1/admin/customers/${id}/kyc/request-docs`, { method: "POST", body: { message } }),
+  timeline: (id) => request(`/api/v1/admin/customers/${id}/timeline`),
+  // v3.1 — Support / tickets
+  tickets: (qs = "") => request("/api/v1/admin/tickets" + (qs ? "?" + qs : "")),
+  ticket: (id) => request(`/api/v1/admin/tickets/${id}`),
+  createTicket: (b) => request("/api/v1/admin/tickets", { method: "POST", body: b }),
+  editTicket: (id, b) => request(`/api/v1/admin/tickets/${id}`, { method: "PATCH", body: b }),
+  addTicketMessage: (id, b) => request(`/api/v1/admin/tickets/${id}/messages`, { method: "POST", body: b }),
 };

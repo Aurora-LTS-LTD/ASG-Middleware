@@ -3697,3 +3697,43 @@ class RolePermission(Base):
     __table_args__ = (
         UniqueConstraint("role_id", "permission_id", name="uq_role_permission"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# SUPPORT / TICKETS (v3.1 — Customer Success)
+# ═══════════════════════════════════════════════════════════════
+# Lightweight helpdesk for the pilot: track who needs help, the channel it
+# came from, priority/SLA, and an internal-notes thread. Written only by the
+# admin Support API.
+
+class Ticket(Base):
+    __tablename__ = "tickets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    subject = Column(String, nullable=False)
+    body = Column(String, nullable=True)
+    status = Column(String, default="open", nullable=False, index=True)
+    # open | in_progress | waiting | resolved | closed
+    priority = Column(String, default="normal", nullable=False)
+    # low | normal | high | critical
+    category = Column(String, default="other", nullable=True)
+    # billing | technical | tax | onboarding | other
+    source = Column(String, default="manual", nullable=True)
+    # manual | whatsapp | email | portal
+    assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+
+
+class TicketMessage(Base):
+    __tablename__ = "ticket_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False, index=True)
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    body = Column(String, nullable=False)
+    is_internal = Column(Boolean, default=True, server_default=sa_text("true"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)

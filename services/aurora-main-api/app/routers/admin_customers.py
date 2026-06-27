@@ -30,7 +30,7 @@ from aurora_shared.database import (
     get_db, User, Organization, Membership, Subscription, Invoice,
 )
 from aurora_shared.database.models import (
-    KycDocument, AccountantEngagement, CustomerNote, AdminAuditEvent,
+    KycDocument, AccountantEngagement, CustomerNote, AdminAuditEvent, AnalyticsEvent,
 )
 from aurora_shared.services.permissions import require_permission
 from aurora_shared.services.webauthn_service import require_step_up
@@ -242,6 +242,14 @@ def create_customer(
     current_user: User = Depends(require_permission("customers", "create")),
     db: Session = Depends(get_db),
 ) -> dict:
+    # Guard against silent duplicates — Israeli business/tax IDs are unique.
+    if db.query(Organization.id).filter(Organization.tax_id == body.tax_id).first():
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "duplicate_tax_id",
+                    "message": f"A customer with tax ID {body.tax_id} already exists."},
+        )
+
     org = Organization(
         display_name=body.display_name, legal_structure=body.legal_structure,
         tax_id=body.tax_id, business_email=body.business_email,
@@ -255,10 +263,16 @@ def create_customer(
                             after={"display_name": org.display_name, "tax_id": org.tax_id,
                                    "is_pilot": org.is_pilot},
                             ip=_client_ip(request))
-    emit_event(db, event_type="customer_created", organization_id=org.id,
+    # Capture values before commit (expire_on_commit would otherwise reload them).
+    org_id, org_name = org.id, org.display_name
+    db.commit()                       # org + audit durable FIRST
+
+    # Analytics rides AFTER the commit so the organization row already exists for
+    # the analytics_events FK. emit_event is best-effort and can never raise.
+    emit_event(db, event_type="customer_created", organization_id=org_id,
                user_id=current_user.id, actor="admin")
     db.commit()
-    return {"id": org.id, "display_name": org.display_name, "status": org.status}
+    return {"id": org_id, "display_name": org_name, "status": "active"}
 
 
 class EditCustomer(BaseModel):
@@ -384,6 +398,128 @@ def add_note(
                             after={"note_id": note.id}, ip=_client_ip(request))
     db.commit()
     return {"id": note.id}
+
+
+# ─────────────────────────────────────────────────────────────
+# KYC actions (v3.1 — Onboarding/KYC control; destructive → step-up)
+# ─────────────────────────────────────────────────────────────
+class KycReject(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+class KycRequestDocs(BaseModel):
+    message: str = Field(..., min_length=1, max_length=500)
+
+
+@router.post("/customers/{org_id}/kyc/approve")
+def kyc_approve(
+    org_id: int,
+    request: Request,
+    current_user: User = Depends(require_permission("kyc", "approve")),
+    _step_up: int = Depends(require_step_up("kyc_approve")),
+    db: Session = Depends(get_db),
+) -> dict:
+    org = _org_or_404(db, org_id)
+    before = {"kyc_status": org.kyc_status}
+    org.kyc_status = "approved"
+    org.kyc_approved_at = datetime.datetime.utcnow()
+    org.kyc_approved_by = current_user.id
+    org.tax_id_verified = True
+    # Approve any docs still pending review.
+    db.query(KycDocument).filter(
+        KycDocument.organization_id == org_id,
+        KycDocument.status.in_(["pending_review", "pending_upload"]),
+    ).update({"status": "approved", "reviewed_by_user_id": current_user.id,
+              "reviewed_at": datetime.datetime.utcnow()}, synchronize_session=False)
+    write_admin_audit_event(db, actor=current_user, action="kyc.approve",
+                            entity_type="organization", entity_id=org_id,
+                            before=before, after={"kyc_status": "approved"},
+                            ip=_client_ip(request))
+    emit_event(db, event_type="kyc_approved", organization_id=org_id,
+               user_id=current_user.id, actor="admin")
+    db.commit()
+    return {"id": org_id, "kyc_status": "approved"}
+
+
+@router.post("/customers/{org_id}/kyc/reject")
+def kyc_reject(
+    org_id: int,
+    body: KycReject,
+    request: Request,
+    current_user: User = Depends(require_permission("kyc", "reject")),
+    _step_up: int = Depends(require_step_up("kyc_reject")),
+    db: Session = Depends(get_db),
+) -> dict:
+    org = _org_or_404(db, org_id)
+    before = {"kyc_status": org.kyc_status}
+    org.kyc_status = "rejected"
+    org.kyc_rejection_reason = body.reason
+    write_admin_audit_event(db, actor=current_user, action="kyc.reject",
+                            entity_type="organization", entity_id=org_id,
+                            before=before, after={"kyc_status": "rejected", "reason": body.reason},
+                            ip=_client_ip(request), severity="warning")
+    emit_event(db, event_type="kyc_rejected", organization_id=org_id,
+               user_id=current_user.id, actor="admin", properties={"reason": body.reason})
+    db.commit()
+    return {"id": org_id, "kyc_status": "rejected"}
+
+
+@router.post("/customers/{org_id}/kyc/request-docs")
+def kyc_request_docs(
+    org_id: int,
+    body: KycRequestDocs,
+    request: Request,
+    current_user: User = Depends(require_permission("kyc", "update")),
+    db: Session = Depends(get_db),
+) -> dict:
+    org = _org_or_404(db, org_id)
+    # Re-open KYC for more documents + leave an internal note of the request.
+    before = {"kyc_status": org.kyc_status}
+    new_status = "pending"
+    org.kyc_status = new_status
+    db.add(CustomerNote(organization_id=org_id, author_user_id=current_user.id,
+                        body=f"Requested more KYC docs: {body.message}",
+                        next_action="Await documents"))
+    write_admin_audit_event(db, actor=current_user, action="kyc.request_docs",
+                            entity_type="organization", entity_id=org_id,
+                            before=before, after={"requested": body.message},
+                            ip=_client_ip(request))
+    emit_event(db, event_type="kyc_docs_requested", organization_id=org_id,
+               user_id=current_user.id, actor="admin")
+    db.commit()
+    return {"id": org_id, "kyc_status": new_status}
+
+
+# ─────────────────────────────────────────────────────────────
+# CUSTOMER TIMELINE (v3.1 — merged audit + analytics + notes)
+# ─────────────────────────────────────────────────────────────
+@router.get("/customers/{org_id}/timeline")
+def customer_timeline(
+    org_id: int,
+    limit: int = Query(100, ge=1, le=300),
+    current_user: User = Depends(require_permission("customers", "read")),
+    db: Session = Depends(get_db),
+) -> dict:
+    _org_or_404(db, org_id)
+    items = []
+    for a in (db.query(AdminAuditEvent)
+              .filter(AdminAuditEvent.entity_type == "organization",
+                      AdminAuditEvent.entity_id == str(org_id))
+              .order_by(AdminAuditEvent.created_at.desc()).limit(limit).all()):
+        items.append({"kind": "audit", "at": a.created_at.isoformat() if a.created_at else None,
+                      "summary": a.action, "severity": a.severity, "actor_user_id": a.actor_user_id})
+    for ev in (db.query(AnalyticsEvent)
+               .filter(AnalyticsEvent.organization_id == org_id)
+               .order_by(AnalyticsEvent.created_at.desc()).limit(limit).all()):
+        items.append({"kind": "event", "at": ev.created_at.isoformat() if ev.created_at else None,
+                      "summary": ev.event_type, "actor": ev.actor})
+    for n in (db.query(CustomerNote)
+              .filter(CustomerNote.organization_id == org_id)
+              .order_by(CustomerNote.created_at.desc()).limit(limit).all()):
+        items.append({"kind": "note", "at": n.created_at.isoformat() if n.created_at else None,
+                      "summary": n.body, "next_action": n.next_action})
+    items.sort(key=lambda x: x["at"] or "", reverse=True)
+    return {"timeline": items[:limit]}
 
 
 # ─────────────────────────────────────────────────────────────

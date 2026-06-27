@@ -5,6 +5,7 @@
   import Finance from "./modules/Finance.svelte";
   import SystemHealth from "./modules/SystemHealth.svelte";
   import Audit from "./modules/Audit.svelte";
+  import Support from "./modules/Support.svelte";
   import CopilotPlaceholder from "./modules/CopilotPlaceholder.svelte";
 
   // Hash router (history API doesn't work from file:// in WKWebView).
@@ -12,6 +13,7 @@
     { id: "overview", label: "Executive Overview", comp: Overview },
     { id: "customers", label: "Customers", comp: Customers },
     { id: "pilot", label: "Pilot Operations", comp: Pilot },
+    { id: "support", label: "Support", comp: Support },
     { id: "finance", label: "Finance", comp: Finance },
     { id: "health", label: "System Health", comp: SystemHealth },
     { id: "audit", label: "Audit / Activity", comp: Audit },

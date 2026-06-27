@@ -238,6 +238,7 @@ def run_db_setup() -> None:
         "migrate_phase30_audit_export_cursor",
         "migrate_phase31_user_must_change_password",
         "migrate_phase32_v3_command_center",
+        "migrate_phase33_support_tickets",
     ):
         try:
             import importlib

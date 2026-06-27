@@ -206,8 +206,12 @@ steps:
   #    minScale=1, so each old 0%-traffic revision keeps a warm instance
   #    holding a DB connection pool. Left unpruned they exhaust aurora-pg's
   #    ~22 connection slots → `FATAL: remaining connection slots reserved`
-  #    (breaks new migrations + the live service). Keep the 2 newest; delete
-  #    the rest. Never fail the build on a prune hiccup.
+  #    (breaks new migrations + the live service). Keep ONLY the just-deployed
+  #    serving revision (the newest); delete the rest — including the PREVIOUS
+  #    serving revision, which otherwise lingers at minScale=1 and re-exhausts
+  #    the pool after every deploy (the v1-19-0 handshake-500 incident). Rollback
+  #    still works: prior images stay in Artifact Registry (re-deploy by version).
+  #    Never fail the build on a prune hiccup.
   # ─────────────────────────────────────────────────────────────────
   - id: prune-old-revisions
     name: gcr.io/cloud-builders/gcloud
@@ -217,8 +221,9 @@ steps:
       - -c
       - |
         set +e
+        # tail -n +2 == keep the single newest (serving) revision, delete all older.
         OLD=$$(gcloud run revisions list --service=${_SERVICE} --region=${_REGION} --project=${_PROJECT} \
-                 --format='value(metadata.name)' --sort-by=~metadata.creationTimestamp | tail -n +3)
+                 --format='value(metadata.name)' --sort-by=~metadata.creationTimestamp | tail -n +2)
         for r in $$OLD; do
           echo "Pruning stale revision $$r"
           gcloud run revisions delete "$$r" --region=${_REGION} --project=${_PROJECT} --quiet || true

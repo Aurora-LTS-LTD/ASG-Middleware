@@ -56,9 +56,13 @@ def write_admin_audit_event(
         severity=severity,
         created_at=datetime.datetime.utcnow(),
     )
-    db.add(ev)
+    # SAVEPOINT — auditing must never poison the mutation's transaction. A bare
+    # flush() in a try/except still leaves the session in a failed state on
+    # error, so the caller's commit would raise PendingRollbackError. begin_nested
+    # confines any failure to this insert.
     try:
-        db.flush()
+        with db.begin_nested():
+            db.add(ev)
     except Exception as e:  # never let auditing crash the mutation path
-        log.error("[admin_audit] flush failed for action=%s: %s", action, e)
+        log.error("[admin_audit] write failed for action=%s: %s", action, e)
     return ev

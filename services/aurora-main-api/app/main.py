@@ -53,6 +53,7 @@ from app.routers.admin_overview import router as admin_overview_router       # v
 from app.routers.admin_system import router as admin_system_router           # v3.0 — system health + non-secret config
 from app.routers.admin_customers import router as admin_customers_router     # v3.0 — customers/360/pilot + suspend/archive/notes
 from app.routers.admin_audit import router as admin_audit_router            # v3.0 — admin audit event read API
+from app.routers.admin_support import router as admin_support_router         # v3.1 — support / tickets
 # native_shell is ALSO mounted on M1 (Scope C — AuroraMacShell talks to api-aurora-lts.com,
 # not the M2 .run.app URL). The router file is copied byte-for-byte from M2; both services
 # share the same Aurora DB so handshake state and NativeDeviceKey rows are consistent.
@@ -148,7 +149,10 @@ app.add_middleware(RequestIDMiddleware)
 # Uncaught Exception logged with full traceback + request_id, returned
 # to client as a safe JSON envelope (no traceback leak).
 from aurora_shared.middleware.error_handlers import register_exception_handlers
-register_exception_handlers(app)
+# NOTE: registered BELOW, after the CORS allowlist is built — the catch-all 500
+# handler runs OUTSIDE CORSMiddleware, so it needs the allowlist to attach the
+# right Access-Control-Allow-Origin (otherwise a 500 reaches the WKWebView with
+# Origin: null and no CORS header, surfacing as the opaque "Load failed").
 
 
 # ─────────────────────────────────────────────────────────────
@@ -191,6 +195,12 @@ if os.getenv("AURORA_RUNTIME", "").lower() != "cloud_run":
         "http://localhost:3000", "http://127.0.0.1:3000",
         "http://localhost:1420", "http://127.0.0.1:1420",
     ]
+
+# Now that the allowlist exists, register the global exception handlers so the
+# catch-all 500 response carries Access-Control-Allow-Origin for allowed origins
+# (incl. the shell's "null"). Without this, every server error is "Load failed".
+register_exception_handlers(app, allowed_origins=_cors_origins)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -240,6 +250,7 @@ app.include_router(admin_overview_router)    # v3.0 — CEO Command Center overv
 app.include_router(admin_system_router)      # v3.0 — system health + non-secret config
 app.include_router(admin_customers_router)   # v3.0 — customers/360/pilot + suspend/archive/notes
 app.include_router(admin_audit_router)       # v3.0 — admin audit event read API
+app.include_router(admin_support_router)     # v3.1 — support / tickets
 app.include_router(native_shell_router)      # Sprint 8.2 — Aurora Mac Shell handshake + device list/revoke (now mounted on M1 for Scope C)
 app.include_router(accountant_auth_router)   # Sprint 8.2 sibling — Accountant Portal OTP + device mgmt
 app.include_router(accountant_dashboard_router)  # P1-16 — Accountant Portal dashboard KPIs
